@@ -1,0 +1,36 @@
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+*.db
+
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# --- Env files (never commit secrets) ---
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# --- OS / editor ---
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- Uploaded files (runtime only) ---
+backend/uploads/

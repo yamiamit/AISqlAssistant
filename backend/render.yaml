@@ -1,0 +1,31 @@
+# Render Blueprint for the FastAPI backend.
+# Deploy: connect this repo on Render and it will detect this file automatically,
+# or create the service manually using the same settings.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: ai-sql-assistant-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_DATABASE_URL
+        sync: false # set to your Neon connection string
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false # generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: CORS_ORIGINS
+        sync: false # set to your deployed Vercel frontend URL
+      - key: SQL_STATEMENT_TIMEOUT_MS
+        value: "10000"
+      - key: SQL_DEFAULT_ROW_LIMIT
+        value: "500"
