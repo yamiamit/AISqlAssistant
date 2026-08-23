@@ -38,19 +38,20 @@ def _json_safe(value):
 
 
 def execute_query(url: str, sql: str, statement_timeout_ms: int = 10_000) -> QueryResult:
+    # statement_timeout is set via SQL (below), not as a libpq startup "options"
+    # connect_arg — Neon's pooled (PgBouncer) connections reject startup-time
+    # options with "unsupported startup parameter in options: statement_timeout".
     engine = create_engine(
         url,
         pool_pre_ping=True,
-        connect_args={
-            "connect_timeout": 5,
-            "options": f"-c statement_timeout={statement_timeout_ms}",
-        },
+        connect_args={"connect_timeout": 5},
     )
     try:
         start = time.perf_counter()
         with engine.connect() as conn:
             with conn.begin():
                 conn.execute(text("SET TRANSACTION READ ONLY"))
+                conn.execute(text(f"SET statement_timeout = {statement_timeout_ms}"))
                 result = conn.execute(text(sql))
                 columns = list(result.keys())
                 rows = [

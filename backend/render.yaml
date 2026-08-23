@@ -19,10 +19,10 @@ services:
         generateValue: true
       - key: ENCRYPTION_KEY
         sync: false # generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-      - key: OPENAI_API_KEY
+      - key: GEMINI_API_KEY
         sync: false
-      - key: OPENAI_MODEL
-        value: gpt-4o-mini
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
       - key: CORS_ORIGINS
         sync: false # set to your deployed Vercel frontend URL
       - key: SQL_STATEMENT_TIMEOUT_MS

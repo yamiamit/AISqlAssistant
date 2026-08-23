@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = "5DGqf6L1Pz6nU2m6b3s0k8x1vQe7h4jZcR9tYw2AbCd="
 
     # --- AI provider ---
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-flash-latest"
     AI_REQUEST_TIMEOUT_SECONDS: int = 30
 
     # --- SQL execution safety ---
