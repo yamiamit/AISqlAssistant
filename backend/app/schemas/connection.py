@@ -47,6 +47,7 @@ class DBConnectionResponse(BaseModel):
     database_name: str
     username: str
     ssl_mode: str
+    is_demo: bool
     schema_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime

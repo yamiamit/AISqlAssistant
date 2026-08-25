@@ -26,6 +26,12 @@ export function createConnection(payload: DBConnectionInput) {
   return apiClient.post<DBConnection>("/api/connections", payload).then((res) => res.data);
 }
 
+// Attaches the shared read-only sample database to the current user (idempotent
+// server-side — calling it again just returns the existing demo connection).
+export function createDemoConnection() {
+  return apiClient.post<DBConnection>("/api/connections/demo").then((res) => res.data);
+}
+
 export function updateConnection(id: number, payload: Partial<DBConnectionInput>) {
   return apiClient.put<DBConnection>(`/api/connections/${id}`, payload).then((res) => res.data);
 }

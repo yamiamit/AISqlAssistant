@@ -16,6 +16,10 @@ Built as a full-stack portfolio project to demonstrate practical AI integration,
 - **Schema Viewer** — a dedicated page listing every table's columns, primary keys, and foreign keys.
 - **Polished UX** — responsive SaaS-style dashboard, dark mode, loading states, and a typing indicator while the AI responds.
 
+## Live demo
+
+Click **"Try with sample data"** on the Connect Database page to start chatting instantly, without connecting your own Postgres database. It attaches a shared, read-only e-commerce dataset (200 customers, 80 products, 1,000 orders across 2023–2025) to your account and drops you straight into chat with 5 example questions to try. See [`backend/demo/README.md`](backend/demo/README.md) for the dataset itself and how to stand it up.
+
 ## Screenshots
 
 | Chat | Schema Viewer |
@@ -126,6 +130,7 @@ Then connect to it from the app's "Connect Database" page. See [`database/README
 | `OPENAI_API_KEY` / `OPENAI_MODEL` | AI provider config |
 | `SQL_STATEMENT_TIMEOUT_MS` / `SQL_DEFAULT_ROW_LIMIT` | SQL execution safety limits |
 | `CORS_ORIGINS` | Allowed frontend origin(s) |
+| `DEMO_DATABASE_URL` | Backs the "Try with sample data" button — see [`backend/demo/README.md`](backend/demo/README.md). Leave empty to disable it. |
 
 **Frontend** (`frontend/.env`, see `frontend/.env.example`):
 

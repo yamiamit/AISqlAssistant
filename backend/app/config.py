@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-flash-latest"
     AI_REQUEST_TIMEOUT_SECONDS: int = 30
 
+    # --- Demo database (shared, read-only sample data visitors can try instantly) ---
+    # A Postgres connection string loaded with backend/demo/schema.sql + seed.sql.
+    # Left empty, "Try with sample data" is unavailable rather than erroring at startup.
+    DEMO_DATABASE_URL: str = ""
+
     # --- SQL execution safety ---
     SQL_STATEMENT_TIMEOUT_MS: int = 10_000
     SQL_DEFAULT_ROW_LIMIT: int = 500

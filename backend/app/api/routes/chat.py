@@ -1,10 +1,11 @@
 """
 The core product pipeline: natural language -> SQL -> validate -> execute ->
-persist -> return. Every step is a separate, individually-testable module
-(ai_service, sql_validator, sql_executor); this route just orchestrates them
-and turns failures at any step into a friendly, persisted chat message
-instead of a raw 500 error, so the UI can always render *something* in the
-conversation thread.
+persist -> return. The pipeline itself lives in services/nl_to_sql.py (so the
+offline eval harness can drive the identical code path without an HTTP
+request); this route owns the ORM side -- ownership checks, conversation
+bookkeeping, and persisting the turn -- and turns a pipeline failure into a
+friendly, persisted chat message instead of a raw 500 error, so the UI can
+always render *something* in the conversation thread.
 """
 from datetime import datetime, timezone
 
@@ -21,11 +22,7 @@ from app.models.message import Message
 from app.models.user import User
 from app.schemas.chat import ChatQueryRequest, ConversationDetail, ConversationSummary, MessageResponse
 from app.services import target_db
-from app.services.ai_service import AIServiceError, generate_sql
-from app.services.schema_introspector import discover_schema, schema_to_prompt_text
-from app.services.sql_executor import QueryExecutionError, execute_query
-from app.services.sql_validator import SqlValidationError, validate_and_prepare
-from app.utils.chart_suggester import suggest_chart_type
+from app.services.nl_to_sql import run_nl_to_sql
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -41,32 +38,23 @@ def run_query(payload: ChatQueryRequest, db: Session = Depends(get_db), user: Us
     message = Message(conversation_id=conversation.id, prompt_text=payload.prompt)
 
     try:
-        try:
-            schema = connection.cached_schema or discover_schema(target_db.url_from_connection(connection))
-        except Exception as exc:
-            raise QueryExecutionError(
-                "Could not reach the connected database to read its schema — it may be offline."
-            ) from exc
-        schema_text = schema_to_prompt_text(schema)
-
-        history = _recent_history(db, conversation.id)
-        ai_result = generate_sql(schema_text, payload.prompt, history)
-        message.generated_sql = ai_result["sql"]
-        message.explanation = ai_result["explanation"]
-
-        safe_sql = validate_and_prepare(ai_result["sql"], settings.SQL_DEFAULT_ROW_LIMIT)
-        message.generated_sql = safe_sql  # reflect any auto-appended LIMIT
-
-        result = execute_query(target_db.url_from_connection(connection), safe_sql, settings.SQL_STATEMENT_TIMEOUT_MS)
-        message.result_columns = result.columns
-        message.result_rows = result.rows
-        message.row_count = result.row_count
-        message.execution_time_ms = result.execution_time_ms
-        message.chart_type = suggest_chart_type(result.columns, result.rows)
-
-    except (AIServiceError, SqlValidationError, QueryExecutionError) as exc:
-        message.error_message = str(exc)
-    except Exception as exc:  # noqa: BLE001 - last-resort friendly fallback for anything unexpected
+        outcome = run_nl_to_sql(
+            connection_url=target_db.url_from_connection(connection),
+            prompt=payload.prompt,
+            cached_schema=connection.cached_schema,
+            history=_recent_history(db, conversation.id),
+            row_limit=settings.SQL_DEFAULT_ROW_LIMIT,
+            statement_timeout_ms=settings.SQL_STATEMENT_TIMEOUT_MS,
+        )
+        message.generated_sql = outcome.generated_sql
+        message.explanation = outcome.explanation
+        message.result_columns = outcome.result_columns
+        message.result_rows = outcome.result_rows
+        message.row_count = outcome.row_count
+        message.execution_time_ms = outcome.execution_time_ms
+        message.chart_type = outcome.chart_type
+        message.error_message = outcome.error_message
+    except Exception as exc:  # noqa: BLE001 - decrypting credentials / reading history can still fail here
         message.error_message = f"Something went wrong while processing your request: {exc.__class__.__name__}."
 
     db.add(message)

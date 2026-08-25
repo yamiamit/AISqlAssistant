@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -14,6 +14,12 @@ class DBConnection(Base):
     at rest (see services/encryption.py) — never stored or logged in plaintext.
     `cached_schema` holds the last-discovered tables/columns/PKs/FKs as JSON so
     the AI prompt and Schema Viewer page don't need to re-introspect on every load.
+
+    `is_demo` marks a row created via POST /api/connections/demo, pointing at
+    the shared DEMO_DATABASE_URL rather than credentials the user supplied. It
+    goes through the exact same target_db.py / sql_executor.py path as any
+    other connection — this flag only gates the API layer (can't be edited or
+    deleted) and the frontend (example-question chips, no credentials shown).
     """
 
     __tablename__ = "db_connections"
@@ -28,6 +34,7 @@ class DBConnection(Base):
     username: Mapped[str] = mapped_column(String(120), nullable=False)
     encrypted_password: Mapped[str] = mapped_column(String(500), nullable=False)
     ssl_mode: Mapped[str] = mapped_column(String(20), default="prefer")
+    is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     cached_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     schema_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

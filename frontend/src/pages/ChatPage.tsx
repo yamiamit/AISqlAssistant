@@ -5,6 +5,7 @@ import { useConnections } from "../context/ConnectionContext";
 import * as chatApi from "../api/chat";
 import ChatWindow from "../components/chat/ChatWindow";
 import ChatInput from "../components/chat/ChatInput";
+import ExampleQuestionChips from "../components/chat/ExampleQuestionChips";
 import EmptyState from "../components/common/EmptyState";
 import Spinner from "../components/common/Spinner";
 import type { Message } from "../types";
@@ -74,6 +75,8 @@ export default function ChatPage() {
     );
   }
 
+  const activeConnection = connections.find((c) => c.id === activeConnectionId);
+
   if (connections.length === 0) {
     return (
       <EmptyState
@@ -100,6 +103,7 @@ export default function ChatPage() {
           <ChatWindow messages={messages} isTyping={isTyping} dbConnectionId={activeConnectionId} />
         )}
       </div>
+      {activeConnection?.is_demo && <ExampleQuestionChips onPick={handleSend} disabled={isTyping} />}
       <ChatInput onSend={handleSend} disabled={isTyping} />
     </div>
   );

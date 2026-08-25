@@ -16,6 +16,7 @@ export interface DBConnection {
   database_name: string;
   username: string;
   ssl_mode: string;
+  is_demo: boolean;
   schema_updated_at: string | null;
   created_at: string;
   updated_at: string;

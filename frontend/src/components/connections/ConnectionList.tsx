@@ -1,4 +1,4 @@
-import { Database, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Database, Pencil, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import type { DBConnection } from "../../types";
 import Card from "../common/Card";
 import Button from "../common/Button";
@@ -22,9 +22,18 @@ export default function ConnectionList({ connections, onEdit, onDelete, onRefres
                 <Database className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{conn.name}</p>
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {conn.name}
+                  {conn.is_demo && (
+                    <span className="flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+                      <Sparkles className="h-2.5 w-2.5" /> Sample data
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500">
-                  {conn.username}@{conn.host}:{conn.port}/{conn.database_name}
+                  {conn.is_demo
+                    ? "Shared, read-only demo database"
+                    : `${conn.username}@${conn.host}:${conn.port}/${conn.database_name}`}
                 </p>
               </div>
             </div>
@@ -39,12 +48,16 @@ export default function ConnectionList({ connections, onEdit, onDelete, onRefres
             <Button size="sm" variant="secondary" onClick={() => onRefreshSchema(conn)} isLoading={refreshingId === conn.id}>
               <RefreshCw className="h-3.5 w-3.5" /> Refresh Schema
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => onEdit(conn)}>
-              <Pencil className="h-3.5 w-3.5" /> Edit
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => onDelete(conn)}>
-              <Trash2 className="h-3.5 w-3.5" /> Remove
-            </Button>
+            {!conn.is_demo && (
+              <>
+                <Button size="sm" variant="secondary" onClick={() => onEdit(conn)}>
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => onDelete(conn)}>
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </Button>
+              </>
+            )}
           </div>
         </Card>
       ))}

@@ -1,0 +1,247 @@
+[
+  {
+    "id": "filter-01",
+    "question": "Which orders are still pending?",
+    "gold_sql": "SELECT order_id, customer_id, order_date, total_amount FROM orders WHERE status = 'pending'",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-02",
+    "question": "List all customers based in India.",
+    "gold_sql": "SELECT customer_id, first_name, last_name, email, city FROM customers WHERE country = 'India'",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-03",
+    "question": "Which products cost more than 100 dollars?",
+    "gold_sql": "SELECT product_id, product_name, price FROM products WHERE price > 100",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-04",
+    "question": "Show the customer accounts that are deactivated.",
+    "gold_sql": "SELECT customer_id, first_name, last_name, email FROM customers WHERE is_active = FALSE",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-05",
+    "question": "Which products have fewer than 50 units in stock?",
+    "gold_sql": "SELECT product_id, product_name, stock_quantity FROM products WHERE stock_quantity < 50",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-06",
+    "question": "Show all cancelled orders.",
+    "gold_sql": "SELECT order_id, customer_id, order_date, total_amount FROM orders WHERE status = 'cancelled'",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-07",
+    "question": "Which suppliers have a lead time longer than 14 days?",
+    "gold_sql": "SELECT supplier_id, supplier_name, country, lead_time_days FROM suppliers WHERE lead_time_days > 14",
+    "tags": ["single_table_filter"]
+  },
+  {
+    "id": "filter-08",
+    "question": "Show every review that gave a rating of 5.",
+    "gold_sql": "SELECT review_id, product_id, customer_id, rating FROM reviews WHERE rating = 5",
+    "tags": ["single_table_filter"]
+  },
+
+  {
+    "id": "agg-01",
+    "question": "How many orders are there in each status?",
+    "gold_sql": "SELECT status, COUNT(*) AS order_count FROM orders GROUP BY status",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-02",
+    "question": "What is the average order value for each year?",
+    "gold_sql": "SELECT EXTRACT(YEAR FROM order_date)::INT AS order_year, ROUND(AVG(total_amount), 2) AS avg_order_value FROM orders GROUP BY order_year",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-03",
+    "question": "How many customers are there in each country?",
+    "gold_sql": "SELECT country, COUNT(*) AS customer_count FROM customers GROUP BY country",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-04",
+    "question": "What is the total payment amount collected by each payment method?",
+    "gold_sql": "SELECT payment_method, ROUND(SUM(amount), 2) AS total_amount FROM payments GROUP BY payment_method",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-05",
+    "question": "How many products does each supplier provide?",
+    "gold_sql": "SELECT supplier_id, COUNT(*) AS product_count FROM products GROUP BY supplier_id",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-06",
+    "question": "What is the average product price in each category?",
+    "gold_sql": "SELECT category_id, ROUND(AVG(price), 2) AS avg_price FROM products GROUP BY category_id",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-07",
+    "question": "How many reviews were given at each rating value?",
+    "gold_sql": "SELECT rating, COUNT(*) AS review_count FROM reviews GROUP BY rating",
+    "tags": ["aggregation"]
+  },
+  {
+    "id": "agg-08",
+    "question": "What are the highest and lowest order totals?",
+    "gold_sql": "SELECT ROUND(MAX(total_amount), 2) AS highest_order, ROUND(MIN(total_amount), 2) AS lowest_order FROM orders",
+    "tags": ["aggregation"]
+  },
+
+  {
+    "id": "join2-01",
+    "question": "Show the top 10 customers by total amount spent across all their orders.",
+    "gold_sql": "SELECT c.customer_id, ROUND(SUM(o.total_amount), 2) AS total_spent FROM customers c JOIN orders o ON o.customer_id = c.customer_id GROUP BY c.customer_id ORDER BY total_spent DESC LIMIT 10",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-02",
+    "question": "List every product together with the name of its category.",
+    "gold_sql": "SELECT p.product_id, p.product_name, c.category_name FROM products p JOIN categories c ON c.category_id = p.category_id",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-03",
+    "question": "Which customers have placed a cancelled order?",
+    "gold_sql": "SELECT DISTINCT c.customer_id, c.first_name, c.last_name FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE o.status = 'cancelled'",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-04",
+    "question": "Show each product alongside the name of the supplier that provides it.",
+    "gold_sql": "SELECT p.product_id, p.product_name, s.supplier_name FROM products p JOIN suppliers s ON s.supplier_id = p.supplier_id",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-05",
+    "question": "What is the average review rating for each product, by product name?",
+    "gold_sql": "SELECT p.product_name, ROUND(AVG(r.rating), 2) AS avg_rating FROM reviews r JOIN products p ON p.product_id = r.product_id GROUP BY p.product_name",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-06",
+    "question": "For orders with an id between 1 and 20, show the payment method used for each.",
+    "gold_sql": "SELECT o.order_id, p.payment_method FROM orders o JOIN payments p ON p.order_id = o.order_id WHERE o.order_id BETWEEN 1 AND 20",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-07",
+    "question": "How many orders has each customer placed?",
+    "gold_sql": "SELECT c.customer_id, COUNT(o.order_id) AS order_count FROM customers c JOIN orders o ON o.customer_id = c.customer_id GROUP BY c.customer_id",
+    "tags": ["two_table_join"]
+  },
+  {
+    "id": "join2-08",
+    "question": "Which customers have written at least one review?",
+    "gold_sql": "SELECT DISTINCT c.customer_id, c.first_name, c.last_name FROM customers c JOIN reviews r ON r.customer_id = c.customer_id",
+    "tags": ["two_table_join"]
+  },
+
+  {
+    "id": "join3-01",
+    "question": "Which product categories have generated the most revenue from order line items?",
+    "gold_sql": "SELECT cat.category_name, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN categories cat ON cat.category_id = p.category_id GROUP BY cat.category_name ORDER BY revenue DESC",
+    "tags": ["multi_table_join"]
+  },
+  {
+    "id": "join3-02",
+    "question": "Show the top 10 products by total units sold, along with their category name.",
+    "gold_sql": "SELECT p.product_name, cat.category_name, SUM(oi.quantity) AS units_sold FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN categories cat ON cat.category_id = p.category_id GROUP BY p.product_name, cat.category_name ORDER BY units_sold DESC LIMIT 10",
+    "tags": ["multi_table_join"]
+  },
+  {
+    "id": "join3-03",
+    "question": "Which suppliers' products have generated the most revenue?",
+    "gold_sql": "SELECT s.supplier_name, ROUND(SUM(oi.quantity * oi.unit_price), 2) AS revenue FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN suppliers s ON s.supplier_id = p.supplier_id GROUP BY s.supplier_name ORDER BY revenue DESC",
+    "tags": ["multi_table_join"]
+  },
+  {
+    "id": "join3-04",
+    "question": "What is the total completed payment revenue from customers in each country?",
+    "gold_sql": "SELECT c.country, ROUND(SUM(pay.amount), 2) AS revenue FROM customers c JOIN orders o ON o.customer_id = c.customer_id JOIN payments pay ON pay.order_id = o.order_id WHERE pay.status = 'completed' GROUP BY c.country ORDER BY revenue DESC",
+    "tags": ["multi_table_join"]
+  },
+  {
+    "id": "join3-05",
+    "question": "List the 5 highest-rated products that have at least 3 reviews, including the country of their supplier.",
+    "gold_sql": "SELECT p.product_name, s.country, ROUND(AVG(r.rating), 2) AS avg_rating FROM reviews r JOIN products p ON p.product_id = r.product_id JOIN suppliers s ON s.supplier_id = p.supplier_id GROUP BY p.product_name, s.country HAVING COUNT(r.review_id) >= 3 ORDER BY avg_rating DESC LIMIT 5",
+    "tags": ["multi_table_join"]
+  },
+  {
+    "id": "join3-06",
+    "question": "For each product category, how many distinct customers have bought from it?",
+    "gold_sql": "SELECT cat.category_name, COUNT(DISTINCT o.customer_id) AS customer_count FROM order_items oi JOIN orders o ON o.order_id = oi.order_id JOIN products p ON p.product_id = oi.product_id JOIN categories cat ON cat.category_id = p.category_id GROUP BY cat.category_name ORDER BY customer_count DESC",
+    "tags": ["multi_table_join"]
+  },
+
+  {
+    "id": "date-01",
+    "question": "Show total order revenue for each month of 2024.",
+    "gold_sql": "SELECT DATE_TRUNC('month', order_date)::DATE AS month, ROUND(SUM(total_amount), 2) AS revenue FROM orders WHERE order_date >= DATE '2024-01-01' AND order_date < DATE '2025-01-01' GROUP BY month ORDER BY month",
+    "tags": ["date_reasoning"]
+  },
+  {
+    "id": "date-02",
+    "question": "How many customers signed up in 2024?",
+    "gold_sql": "SELECT COUNT(*) AS signups FROM customers WHERE signup_date >= DATE '2024-01-01' AND signup_date < DATE '2025-01-01'",
+    "tags": ["date_reasoning"]
+  },
+  {
+    "id": "date-03",
+    "question": "Which orders were placed in the last quarter of 2025?",
+    "gold_sql": "SELECT order_id, order_date, status, total_amount FROM orders WHERE order_date >= DATE '2025-10-01' AND order_date < DATE '2026-01-01'",
+    "tags": ["date_reasoning"]
+  },
+  {
+    "id": "date-04",
+    "question": "Show the orders placed in the first half of 2023.",
+    "gold_sql": "SELECT order_id, order_date, status, total_amount FROM orders WHERE order_date >= DATE '2023-01-01' AND order_date < DATE '2023-07-01'",
+    "tags": ["date_reasoning"]
+  },
+  {
+    "id": "date-05",
+    "question": "What was the total order revenue in the first quarter of 2025?",
+    "gold_sql": "SELECT ROUND(SUM(total_amount), 2) AS revenue FROM orders WHERE order_date >= DATE '2025-01-01' AND order_date < DATE '2025-04-01'",
+    "tags": ["date_reasoning"]
+  },
+
+  {
+    "id": "hard-01",
+    "question": "Who are our best customers?",
+    "gold_sql": "SELECT c.customer_id, ROUND(SUM(pay.amount), 2) AS revenue FROM customers c JOIN orders o ON o.customer_id = c.customer_id JOIN payments pay ON pay.order_id = o.order_id WHERE pay.status = 'completed' GROUP BY c.customer_id ORDER BY revenue DESC LIMIT 10",
+    "tags": ["hard_ambiguous"]
+  },
+  {
+    "id": "hard-02",
+    "question": "Which products are underperforming?",
+    "gold_sql": "SELECT p.product_name, SUM(oi.quantity) AS units_sold FROM order_items oi JOIN products p ON p.product_id = oi.product_id GROUP BY p.product_name ORDER BY units_sold ASC LIMIT 10",
+    "tags": ["hard_ambiguous"]
+  },
+  {
+    "id": "hard-03",
+    "question": "Show me month-over-month revenue growth.",
+    "gold_sql": "WITH monthly AS (SELECT DATE_TRUNC('month', order_date)::DATE AS month, SUM(total_amount) AS revenue FROM orders GROUP BY month) SELECT month, ROUND(revenue, 2) AS revenue, ROUND(revenue - LAG(revenue) OVER (ORDER BY month), 2) AS growth FROM monthly ORDER BY month",
+    "tags": ["hard_ambiguous"]
+  },
+  {
+    "id": "hard-04",
+    "question": "Which customers are at risk of churning?",
+    "gold_sql": "SELECT c.customer_id, MAX(o.order_date) AS last_order_date FROM customers c JOIN orders o ON o.customer_id = c.customer_id WHERE c.is_active = TRUE GROUP BY c.customer_id HAVING MAX(o.order_date) < (SELECT MAX(order_date) FROM orders) - INTERVAL '180 days' ORDER BY last_order_date",
+    "tags": ["hard_ambiguous"]
+  },
+  {
+    "id": "hard-05",
+    "question": "What is our profit margin by category?",
+    "gold_sql": "SELECT cat.category_name, ROUND(SUM(oi.quantity * (oi.unit_price - p.cost)), 2) AS gross_margin FROM order_items oi JOIN products p ON p.product_id = oi.product_id JOIN categories cat ON cat.category_id = p.category_id GROUP BY cat.category_name ORDER BY gross_margin DESC",
+    "tags": ["hard_ambiguous"]
+  }
+]

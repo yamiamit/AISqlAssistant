@@ -19,8 +19,8 @@ Three free-tier services, deployed independently: **Neon** (app database), **Ren
    | `APP_DATABASE_URL` | Neon connection string from step 1 |
    | `JWT_SECRET_KEY` | Render can auto-generate this (see `render.yaml`) |
    | `ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
-   | `OPENAI_API_KEY` | Your OpenAI key |
-   | `OPENAI_MODEL` | `gpt-4o-mini` |
+   | `GEMINI_API_KEY` | Your Gemini API key |
+   | `GEMINI_MODEL` | `gemini-2.5-flash` |
    | `CORS_ORIGINS` | Your Vercel URL, e.g. `https://ai-sql-assistant.vercel.app` |
    | `SQL_STATEMENT_TIMEOUT_MS` | `10000` |
    | `SQL_DEFAULT_ROW_LIMIT` | `500` |

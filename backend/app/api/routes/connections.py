@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.deps import get_current_user
 from app.database import get_db
 from app.models.db_connection import DBConnection
@@ -62,6 +63,57 @@ def test_connection(payload: DBConnectionCreate, user: User = Depends(get_curren
     return TestConnectionResult(success=ok, message="Connection successful." if ok else error)
 
 
+@router.post("/demo", response_model=DBConnectionResponse, status_code=status.HTTP_201_CREATED)
+def create_demo_connection(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """
+    Attaches the shared, read-only demo database to the current user as a
+    normal connection row (flagged is_demo=True) so a visitor can start
+    chatting without supplying any credentials of their own. Deliberately
+    reuses target_db.py / schema_introspector.py / sql_executor.py exactly
+    as any other connection would — there is no separate "demo mode" code
+    path for the chat pipeline to diverge from.
+
+    Idempotent: calling it again just returns the user's existing demo
+    connection instead of stacking up duplicates.
+    """
+    if not settings.DEMO_DATABASE_URL:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The sample database isn't configured on this server yet.",
+        )
+
+    existing = (
+        db.query(DBConnection)
+        .filter(DBConnection.user_id == user.id, DBConnection.is_demo.is_(True))
+        .first()
+    )
+    if existing:
+        return existing
+
+    try:
+        fields = target_db.parse_connection_string(settings.DEMO_DATABASE_URL)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
+
+    conn = DBConnection(
+        user_id=user.id,
+        name="Sample E-Commerce Data",
+        host=fields.host,
+        port=fields.port,
+        database_name=fields.database_name,
+        username=fields.username,
+        encrypted_password=encrypt_value(fields.password),
+        ssl_mode=fields.ssl_mode,
+        is_demo=True,
+    )
+    db.add(conn)
+    db.commit()
+    db.refresh(conn)
+
+    _refresh_schema_inplace(db, conn)
+    return conn
+
+
 @router.post("", response_model=DBConnectionResponse, status_code=status.HTTP_201_CREATED)
 def create_connection(payload: DBConnectionCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
@@ -95,6 +147,8 @@ def update_connection(
     user: User = Depends(get_current_user),
 ):
     conn = _get_owned_connection(db, connection_id, user)
+    if conn.is_demo:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="The sample database connection can't be edited.")
 
     if payload.connection_string:
         try:
@@ -131,6 +185,8 @@ def update_connection(
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_connection(connection_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     conn = _get_owned_connection(db, connection_id, user)
+    if conn.is_demo:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="The sample database connection can't be removed.")
     db.delete(conn)
     db.commit()
 
