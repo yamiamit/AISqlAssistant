@@ -48,6 +48,24 @@ It asserts that identical-to-gold and differently-aliased-but-equivalent SQL bot
 empty results each land in the right failure bucket. Run it when the provider is
 down or out of quota, or after touching the comparison logic.
 
+## Splitting the failures (no AI calls)
+
+The runner's headline score is strict: a case fails if the column count differs,
+even when the rows are right. That collapses "answered correctly but SELECTed
+extra columns" and "got the answer wrong" into one `wrong_result` bucket, and
+only the second is a text-to-SQL quality problem.
+
+`analyze_failures.py` separates them by re-executing the SQL already saved in a
+results file and asking whether gold's rows can be recovered from some subset of
+the generated query's columns:
+
+```bash
+python evals/analyze_failures.py evals/results/<timestamp>.json
+```
+
+It costs zero AI calls. Quote both numbers it prints, not just one — see
+[`BASELINE.md`](BASELINE.md) for the current baseline and why the pair matters.
+
 ## What "execution match" means
 
 A case passes when the generated SQL, **actually run against the demo database**,
@@ -119,9 +137,21 @@ catastrophic model result. The runner therefore counts `ai_rate_limited` /
 !! THIS RUN IS NOT A VALID BASELINE.
 ```
 
-Treat any run carrying that banner as void and re-run it. On Gemini's free tier,
-40 cases across 4 workers can exhaust a per-minute or per-day quota on its own;
-`--limit` or a paid key avoids that.
+Treat any run carrying that banner as void and re-run it.
+
+Free-tier quota is granted **per model, per project, per day** — so rotating the
+API key changes nothing, but switching models gives you a fresh bucket. This
+matters more than it sounds: the app's default `GEMINI_MODEL=gemini-flash-latest`
+currently resolves to `gemini-3.7-flash`, whose free tier allows **20 requests
+per day**. A 40-case run cannot complete on it even once. Override per-run:
+
+```bash
+GEMINI_MODEL=gemini-3.5-flash-lite python evals/runner.py
+```
+
+`--limit` or a paid key are the other ways out. Check the model actually resolves
+before a long run — `gemini-2.5-flash` and `gemini-2.5-flash-lite` now 404 with
+"no longer available to new users" on newly issued keys.
 
 ## Retry policy
 
