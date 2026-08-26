@@ -12,6 +12,7 @@ import decimal
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
+from datetime import time as datetime_time  # aliased: plain `time` is the stdlib module imported above
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -30,11 +31,33 @@ class QueryResult:
 
 
 def _json_safe(value):
+    """
+    Coerce one Postgres value into something `json.dumps` can handle.
+
+    The final `str(value)` fallback matters more than the named cases above it.
+    Target databases are arbitrary, so a UUID primary key, an INTERVAL, a TIME,
+    or a BYTEA column is entirely ordinary -- and an unconvertible value does
+    NOT fail here. It fails later, at `db.commit()` in the chat route, when
+    SQLAlchemy serializes result_rows into its JSON column. That call sits
+    outside the route's try/except, so the user gets an unhandled 500 instead of
+    a friendly message. Degrading an unknown type to its string form keeps the
+    question answerable.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
     if isinstance(value, decimal.Decimal):
         return float(value)
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, (datetime, date, datetime_time)):
         return value.isoformat()
-    return value
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return bytes(value).hex()
+    # Postgres arrays arrive as lists and json/jsonb as dicts; recurse so a
+    # Decimal or date *inside* one is converted too.
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    return str(value)
 
 
 def execute_query(url: str, sql: str, statement_timeout_ms: int = 10_000) -> QueryResult:
