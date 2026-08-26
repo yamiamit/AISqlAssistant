@@ -38,7 +38,7 @@ Click **"Try with sample data"** on the Connect Database page to start chatting 
 | Backend | FastAPI, SQLAlchemy, Pydantic |
 | Database | PostgreSQL (Neon in production) |
 | Auth | JWT (PyJWT) + bcrypt (passlib) |
-| AI | OpenAI (`gpt-4o-mini`, JSON-mode) |
+| AI | Google Gemini (`gemini-flash-latest`, JSON-mode) |
 | PDF | pdfplumber (extraction), ReportLab + Matplotlib (report generation) |
 | Deployment | Vercel (frontend), Render (backend), Neon (database) |
 
@@ -72,7 +72,7 @@ flowchart LR
     FE["React SPA"] -- "JWT" --> API["FastAPI backend"]
     API --> AppDB[("App DB (Neon)")]
     API -- "dynamic, per-connection" --> TargetDB[("Your Postgres DB")]
-    API --> OpenAI["OpenAI API"]
+    API --> Gemini["Gemini API"]
 ```
 
 The backend maintains its own metadata database (users, connections, chats, saved queries) separately from the arbitrary external databases users connect to — those are reached through short-lived, per-request connections built from encrypted stored credentials. Full write-up: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Endpoint reference: [`docs/API.md`](docs/API.md).
@@ -83,7 +83,7 @@ The backend maintains its own metadata database (users, connections, chats, save
 - Python 3.11+
 - Node.js 20+
 - A PostgreSQL database (local install, Docker, or a free [Neon](https://neon.tech) project) — you need **two**: one for the app's own data, one to use as the "connected" target database (or reuse the [sample e-commerce database](database/README.md))
-- An [OpenAI API key](https://platform.openai.com/api-keys) (only required for AI SQL generation and PDF extraction — everything else works without one)
+- A [Gemini API key](https://aistudio.google.com/app/apikey) (only required for AI SQL generation and PDF extraction — everything else works without one)
 
 ### Backend
 
@@ -91,7 +91,8 @@ The backend maintains its own metadata database (users, connections, chats, save
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # fill in APP_DATABASE_URL, ENCRYPTION_KEY, OPENAI_API_KEY, etc.
+cp .env.example .env   # fill in APP_DATABASE_URL, JWT_SECRET_KEY, ENCRYPTION_KEY, GEMINI_API_KEY, etc.
+                       # the app refuses to start on a placeholder secret — see app/config.py
 uvicorn app.main:app --reload
 ```
 
@@ -127,7 +128,7 @@ Then connect to it from the app's "Connect Database" page. See [`database/README
 | `APP_DATABASE_URL` | Postgres connection string for the app's own data |
 | `JWT_SECRET_KEY` | Signs auth tokens |
 | `ENCRYPTION_KEY` | Fernet key encrypting stored target-DB passwords at rest |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | AI provider config |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | AI provider config |
 | `SQL_STATEMENT_TIMEOUT_MS` / `SQL_DEFAULT_ROW_LIMIT` | SQL execution safety limits |
 | `CORS_ORIGINS` | Allowed frontend origin(s) |
 | `DEMO_DATABASE_URL` | Backs the "Try with sample data" button — see [`backend/demo/README.md`](backend/demo/README.md). Leave empty to disable it. |

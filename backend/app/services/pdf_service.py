@@ -2,7 +2,7 @@
 PDF text extraction (pdfplumber) and validation/insertion of AI-extracted
 records against a target table's real schema. Kept separate from the
 AI call itself (ai_service.extract_pdf_records) so text extraction and
-insertion logic can be tested without hitting OpenAI.
+insertion logic can be tested without hitting the AI provider.
 """
 import io
 

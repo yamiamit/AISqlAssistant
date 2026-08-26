@@ -20,13 +20,13 @@ flowchart LR
         TargetDB[("Target Postgres DB<br/>(any host — Neon,<br/>local, RDS, etc.)")]
     end
 
-    OpenAI["OpenAI API<br/>(gpt-4o-mini)"]
+    Gemini["Gemini API<br/>(gemini-flash-latest)"]
 
     FE -- "HTTPS + JWT Bearer" --> API
     API -- "SQLAlchemy ORM" --> AppDB
     API -- "dynamic connection<br/>(per DBConnection row,<br/>read-only, validated SQL)" --> TargetDB
-    API -- "schema + prompt" --> OpenAI
-    OpenAI -- "{sql, explanation}" --> API
+    API -- "schema + prompt" --> Gemini
+    Gemini -- "{sql, explanation}" --> API
 ```
 
 Deployed as three independent pieces — **Vercel** (frontend), **Render** (backend), **Neon** (app database) — plus the AI provider and whichever Postgres database the user connects. Nothing here needs Docker, Kubernetes, or a message queue: it's a standard three-tier web app with one extra external dependency (the user's target database) that the backend talks to dynamically at request time.
@@ -43,7 +43,7 @@ This is the one architectural idea worth explaining clearly in an interview:
 `POST /api/chat/query` (`backend/app/api/routes/chat.py`) orchestrates five independently testable modules, each of which turns its own failure mode into a friendly, persisted error message instead of a raw 500:
 
 1. **Schema discovery** (`schema_introspector.py`) — `SQLAlchemy.inspect()` on the target DB, cached on the `DBConnection` row.
-2. **AI generation** (`ai_service.py`) — schema + prompt + short conversation history → OpenAI JSON-mode call → `{sql, explanation}`.
+2. **AI generation** (`ai_service.py`) — schema + prompt + short conversation history → Gemini JSON-mode call → `{sql, explanation}`.
 3. **SQL validation** (`sql_validator.py`) — allow-list check (SELECT/WITH only, no stacked statements, keyword blocklist, forced `LIMIT`).
 4. **Execution** (`sql_executor.py`) — short-lived connection, `SET TRANSACTION READ ONLY`, Postgres `statement_timeout`, JSON-safe row serialization.
 5. **Persistence** — the full turn (prompt, SQL, explanation, results, chart type, timing) is saved as one `Message` row so chat history is just a normal read query.

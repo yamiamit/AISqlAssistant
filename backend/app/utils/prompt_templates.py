@@ -3,9 +3,10 @@ Prompt templates used by services/ai_service.py.
 
 Kept in one place (rather than inlined in the service) so the actual prompt
 engineering — schema injection, few-shot examples, output-format contract —
-is easy to find, read, and iterate on independently of the OpenAI call
+is easy to find, read, and iterate on independently of the Gemini call
 plumbing.
 """
+import json
 
 SQL_GENERATION_SYSTEM_PROMPT = """You are an expert PostgreSQL analyst embedded in a chat product. \
 Convert the user's natural-language question into ONE safe, read-only SQL query for the schema below.
@@ -15,6 +16,7 @@ Rules:
 - NEVER write INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT, or any statement that changes data or schema.
 - Only reference tables and columns that literally appear in the schema below. Never invent a table or column name.
 - Always include a LIMIT clause (500 or fewer rows) unless the query already aggregates down to a handful of rows.
+- Do NOT invent a top-N cutoff. Only add `LIMIT n` / `ORDER BY ... LIMIT n` for ranking when the question actually asks for one ("top 10", "best 5"). "Which suppliers generated the most revenue?" asks for ALL suppliers ranked, not the top 10.
 - Prefer explicit JOIN ... ON syntax over comma joins.
 - Use column aliases (AS) for computed/aggregated columns so result headers are readable.
 - Respond with ONLY a JSON object, no markdown fences, matching exactly:
@@ -56,7 +58,12 @@ def build_sql_generation_messages(schema_text: str, user_prompt: str, history: l
 
     for turn in (history or [])[-3:]:
         messages.append({"role": "user", "content": turn["prompt"]})
-        messages.append({"role": "assistant", "content": f'{{"sql": {turn["sql"]!r}}}'})
+        # json.dumps, not an f-string with !r: Python's repr quotes with '
+        # unless the value contains one, so SQL using a double-quoted
+        # identifier (SELECT "user" FROM t) produced {"sql": 'SELECT "user"...'}
+        # -- not valid JSON. The model was being shown malformed examples of
+        # its own output format, in the one place format-following matters most.
+        messages.append({"role": "assistant", "content": json.dumps({"sql": turn["sql"]})})
 
     messages.append({"role": "user", "content": user_prompt})
     return messages

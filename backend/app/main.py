@@ -15,6 +15,7 @@ from app.api.routes import auth, chat, connections, export, pdf, saved_queries
 from app.config import settings
 from app.database import Base, engine
 from app.models import *  # noqa: F401,F403 - ensures all models are registered on Base.metadata
+from app.schema_sync import sync_columns
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ai_sql_assistant")
@@ -44,6 +45,7 @@ app.include_router(export.router)
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    sync_columns(engine)  # create_all() adds tables but never new columns on existing ones
     logger.info("App database tables ensured.")
 
 
