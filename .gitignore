@@ -37,3 +37,5 @@ backend/uploads/
 
 # --- Eval run artifacts (the harness + cases are committed, runs are not) ---
 backend/evals/results/
+
+preparation/

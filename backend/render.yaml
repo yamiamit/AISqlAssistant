@@ -13,16 +13,38 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
+      # Match the version the app is developed and tested on. Without this
+      # Render picks its current default, where the pinned google-generativeai
+      # 0.8.3 / psycopg2-binary wheels are not guaranteed to resolve.
+      - key: PYTHON_VERSION
+        value: "3.11.7"
       - key: APP_DATABASE_URL
         sync: false # set to your Neon connection string
       - key: JWT_SECRET_KEY
         generateValue: true
+      # Render emits a base64-encoded 256-bit value, which is exactly the
+      # 32-byte urlsafe-base64 key Fernet expects. Generated once at service
+      # creation and stable across deploys — do NOT rotate it after go-live:
+      # every stored target-DB password is encrypted under it and would become
+      # undecryptable. To supply your own instead, swap this for `sync: false`.
       - key: ENCRYPTION_KEY
-        sync: false # generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+        generateValue: true
       - key: GEMINI_API_KEY
         sync: false
+      # Verified working on 2026-08-26 against a current AI Studio key:
+      #   gemini-3.6-flash       OK   4.2s   <- chosen
+      #   gemini-3.5-flash-lite  OK   1.1s   (faster/cheaper; good for eval runs)
+      #   gemini-flash-latest    504 DeadlineExceeded
+      #   gemini-3.7-flash       504 DeadlineExceeded
+      #   gemini-2.5-flash       404 "no longer available to new users"
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.6-flash
+      # Backs the "Try with sample data" button -- without it that endpoint
+      # returns 503 and a visitor cannot use the app without supplying their
+      # own Postgres credentials. Point at a database loaded with
+      # backend/demo/schema.sql + seed.sql (see backend/demo/README.md).
+      - key: DEMO_DATABASE_URL
+        sync: false
       - key: CORS_ORIGINS
         sync: false # set to your deployed Vercel frontend URL
       - key: SQL_STATEMENT_TIMEOUT_MS
