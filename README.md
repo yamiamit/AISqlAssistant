@@ -143,13 +143,6 @@ Then connect to it from the app's "Connect Database" page. See [`database/README
 
 Frontend → Vercel, backend → Render, app database → Neon. Config files (`frontend/vercel.json`, `backend/render.yaml`) are already in the repo — full step-by-step in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-## Code Quality
-
-- **Clean architecture**: routes stay thin — all business logic (SQL validation, AI calls, schema discovery, PDF parsing) lives in single-purpose `services/` modules that are independently testable and independently explainable.
-- **Security by construction**: passwords bcrypt-hashed; target-DB credentials Fernet-encrypted at rest; SQL allow-listed, forced-`LIMIT`, read-only-transaction, and statement-timeout as layered defenses; PDF-driven inserts always parameterized.
-- **Typed end-to-end**: Pydantic schemas on the backend, TypeScript interfaces on the frontend mirroring them.
-- **Every failure mode has a home**: invalid SQL, empty results, bad credentials, AI timeouts, an offline database, and unparseable PDFs each produce a specific, human-readable message instead of a generic error.
-
 ## Future Improvements
 
 - Refresh tokens / server-side session invalidation (current auth is stateless JWT — simple, but "logout" only clears the client-side token)
@@ -158,14 +151,4 @@ Frontend → Vercel, backend → Render, app database → Neon. Config files (`f
 - Role-based read-only database credentials enforced at the Postgres level, not just the app layer
 - Automated test suite (pytest for the backend services, Vitest/RTL for frontend components)
 
-## Interview Talking Points
 
-This project is designed so each of these is a two-minute answer, not a slide:
-
-- **Auth flow** — registration → bcrypt hash → JWT issuance → Bearer-token verification on every request (`core/security.py`, `core/deps.py`)
-- **Dynamic database connections** — why the app maintains two separate Postgres roles (its own metadata DB vs. arbitrary target DBs) and how credentials are encrypted at rest and decrypted only to open a short-lived connection (`services/target_db.py`, `services/encryption.py`)
-- **Schema discovery** — using `SQLAlchemy.inspect()` instead of hand-written `information_schema` queries (`services/schema_introspector.py`)
-- **Prompt engineering** — how the schema gets serialized into the AI prompt, why JSON-mode + a few-shot example keeps output parseable (`utils/prompt_templates.py`)
-- **SQL validation** — the layered defense between "AI-generated text" and "SQL that actually runs" (`services/sql_validator.py`, `services/sql_executor.py`)
-- **PDF → DB pipeline** — why extraction and insertion are two separate API calls, with the editable preview as the safety gate in between (`api/routes/pdf.py`)
-- **Chart selection** — a small rule-based heuristic instead of another AI call (`utils/chart_suggester.py`) — a deliberate simplicity trade-off
