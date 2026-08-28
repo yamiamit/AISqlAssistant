@@ -20,11 +20,13 @@ python evals/runner.py --case-id hard-05 --case-id join3-01
 python evals/runner.py --limit 5                        # cap the run
 ```
 
-Requires `DEMO_DATABASE_URL` and `GEMINI_API_KEY` (environment or `backend/.env`);
-the runner exits loudly if either is missing.
+Requires `DEMO_DATABASE_URL` and the active provider's key — `GROQ_API_KEY` by
+default, or `GEMINI_API_KEY` when `AI_PROVIDER=gemini` (environment or
+`backend/.env`). The runner exits loudly naming whichever is missing.
 
-> **Cost**: a full run makes **~40 Gemini calls** (one per case, plus at most one
-> retry per case on a transient provider error). It is not free — use `--tag`,
+> **Cost**: a full run makes **~40 AI calls** (one per case, plus at most one
+> retry per case on a transient provider error). Groq's free tier absorbs this
+> comfortably; on Gemini's it does not fit (see below). Still, use `--tag`,
 > `--case-id`, or `--limit` while iterating.
 
 Console output gives an overall score, a per-tag table, and every failing case id
@@ -36,7 +38,7 @@ and its cases are committed, individual run artifacts are not.
 ## Checking the harness itself (no AI calls)
 
 A bug in the grader silently corrupts every score it produces, so the grading
-path has its own test that stubs the Gemini call and runs everything downstream
+path has its own test that stubs the AI call and runs everything downstream
 for real against the demo database:
 
 ```bash
@@ -118,7 +120,7 @@ Failures are recorded distinctly, because they mean different things:
 | `validator_rejected` | `sql_validator` refused the SQL (not SELECT/WITH, blocklisted keyword, stacked statement) |
 | `sql_error` | Postgres rejected it — usually a hallucinated table/column |
 | `ai_timeout` | Provider did not respond in time, after one retry |
-| `ai_rate_limited` | Provider refused on quota/rate limit (`ResourceExhausted`/429), after one retry |
+| `ai_rate_limited` | Provider refused on quota/rate limit (Groq 429 / Gemini `ResourceExhausted`), after one retry |
 | `ai_error` | Provider returned an error, or unparseable/non-JSON output |
 | `schema_error` | Could not introspect the demo database |
 | `empty_result` | Ran fine, returned 0 rows, gold returned some |
@@ -139,19 +141,33 @@ catastrophic model result. The runner therefore counts `ai_rate_limited` /
 
 Treat any run carrying that banner as void and re-run it.
 
-Free-tier quota is granted **per model, per project, per day** — so rotating the
-API key changes nothing, but switching models gives you a fresh bucket. This
-matters more than it sounds: the app's default `GEMINI_MODEL=gemini-flash-latest`
-currently resolves to `gemini-3.7-flash`, whose free tier allows **20 requests
-per day**. A 40-case run cannot complete on it even once. Override per-run:
+**This is why the harness defaults to Groq.** Gemini's free-tier quota is granted
+**per model, per project, per day** — so rotating the API key changes nothing,
+but switching models gives you a fresh bucket. The app's old default
+`GEMINI_MODEL=gemini-flash-latest` resolves to `gemini-3.7-flash`, whose free
+tier allows **20 requests per day**: a 40-case run cannot complete on it even
+once. Groq's free tier is far more generous per day, which is what makes
+repeated runs — variance, cross-model comparison — practical at all.
+
+Model ids get retired on both providers, so check yours resolves before a long
+run. On Groq:
 
 ```bash
-GEMINI_MODEL=gemini-3.5-flash-lite python evals/runner.py
+curl -s -H "Authorization: Bearer $GROQ_API_KEY" \
+  https://api.groq.com/openai/v1/models | python3 -m json.tool | grep '"id"'
 ```
 
-`--limit` or a paid key are the other ways out. Check the model actually resolves
-before a long run — `gemini-2.5-flash` and `gemini-2.5-flash-lite` now 404 with
-"no longer available to new users" on newly issued keys.
+A retired id returns 404, which the runner deliberately does **not** treat as
+transient — it fails fast instead of burning a retry on every case.
+
+To score the documented Gemini baseline instead:
+
+```bash
+AI_PROVIDER=gemini GEMINI_MODEL=gemini-3.5-flash-lite python evals/runner.py
+```
+
+(`gemini-2.5-flash` and `gemini-2.5-flash-lite` now 404 with "no longer
+available to new users" on newly issued keys.)
 
 ## Retry policy
 

@@ -21,6 +21,8 @@ import argparse
 import json
 import os
 import sys
+import threading
+import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -44,6 +46,38 @@ from app.services.schema_introspector import discover_schema  # noqa: E402
 from app.services.sql_executor import QueryExecutionError, execute_query  # noqa: E402
 
 MAX_WORKERS = 4
+
+# --- Provider rate limiting -------------------------------------------------
+# Groq's free tier caps *tokens per minute*, not requests per day: 8000 TPM
+# against ~1040 tokens per case (887 prompt + ~150 completion) allows only
+# ~7.7 calls/min. Four unthrottled workers spend the whole minute's budget in
+# seconds, and every remaining case then 429s -- which is exactly how the first
+# 40-case Groq run scored 26/40 `ai_rate_limited` and voided itself.
+#
+# So calls are paced to a minimum interval. Workers still overlap on the
+# Postgres side; only the AI call is serialized. Override for a paid key or a
+# different provider:
+#   EVAL_MIN_CALL_INTERVAL_SECONDS=0 python evals/runner.py
+AI_CALL_MIN_INTERVAL = float(os.environ.get("EVAL_MIN_CALL_INTERVAL_SECONDS", "8.5"))
+
+# A per-day/per-minute 429 is not transient in the way a blip is: re-asking
+# immediately cannot succeed. Wait out the window before the one retry.
+RATE_LIMIT_BACKOFF_SECONDS = float(os.environ.get("EVAL_RATE_LIMIT_BACKOFF_SECONDS", "62"))
+
+_throttle_lock = threading.Lock()
+_last_call_at = 0.0
+
+
+def _throttle() -> None:
+    """Block until enough time has passed since the last AI call."""
+    global _last_call_at
+    if AI_CALL_MIN_INTERVAL <= 0:
+        return
+    with _throttle_lock:
+        wait = _last_call_at + AI_CALL_MIN_INTERVAL - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _last_call_at = time.monotonic()
 GOLD_TIMEOUT_MS = 15_000
 
 # Grading outcomes. Everything that isn't PASS is a failure, but they are
@@ -70,7 +104,7 @@ GOLD_ERROR = "gold_error"
 # things to whoever reads the report: "the provider was slow" is a latency
 # problem, "the key is out of quota" means the run measured nothing at all.
 _TIMEOUT_MARKERS = ("took too long", "DeadlineExceeded")
-_RATE_LIMIT_MARKERS = ("ResourceExhausted", "TooManyRequests", "429", "quota")
+_RATE_LIMIT_MARKERS = ("ResourceExhausted", "TooManyRequests", "429", "quota", "RateLimitError", "rate limit")
 _OTHER_TRANSIENT_MARKERS = ("ServiceUnavailable", "InternalServerError", "Aborted", "RetryError", "Unavailable")
 
 
@@ -153,6 +187,7 @@ def _run_case(case: dict, cached_schema: dict) -> dict:
         "generated_row_count": None,
     }
 
+    _throttle()
     outcome = run_nl_to_sql(
         connection_url=settings.DEMO_DATABASE_URL,
         prompt=case["question"],
@@ -164,7 +199,12 @@ def _run_case(case: dict, cached_schema: dict) -> dict:
 
     # One retry, only for transient provider errors -- never for a bad answer.
     if outcome.failure_stage == STAGE_AI and _is_transient(outcome.error_message):
+        # Rate limits need the window to actually roll over; retrying inside it
+        # just burns the second attempt too.
+        if _matches(outcome.error_message, _RATE_LIMIT_MARKERS):
+            time.sleep(RATE_LIMIT_BACKOFF_SECONDS)
         record["attempts"] = 2
+        _throttle()
         outcome = run_nl_to_sql(
             connection_url=settings.DEMO_DATABASE_URL,
             prompt=case["question"],
@@ -236,8 +276,8 @@ def _check_env() -> None:
     missing = []
     if not settings.DEMO_DATABASE_URL:
         missing.append("DEMO_DATABASE_URL")
-    if not settings.GEMINI_API_KEY:
-        missing.append("GEMINI_API_KEY")
+    if not settings.AI_API_KEY:
+        missing.append(settings.AI_API_KEY_NAME)
     if missing:
         sys.exit(
             f"ERROR: missing required setting(s): {', '.join(missing)}.\n"
@@ -317,8 +357,14 @@ def main() -> None:
         sys.exit(f"ERROR: could not introspect DEMO_DATABASE_URL ({exc.__class__.__name__}): {exc}")
 
     print(f"Running {len(cases)} case(s) with {MAX_WORKERS} workers "
-          f"(~{len(cases)} Gemini calls, plus retries) ...")
-    print(f"Model: {settings.GEMINI_MODEL} | AI timeout: {settings.AI_REQUEST_TIMEOUT_SECONDS}s\n")
+          f"(~{len(cases)} AI calls, plus retries) ...")
+    print(f"Provider: {settings.AI_PROVIDER} | Model: {settings.AI_MODEL} "
+          f"| AI timeout: {settings.AI_REQUEST_TIMEOUT_SECONDS}s")
+    if AI_CALL_MIN_INTERVAL > 0:
+        print(f"Pacing: {AI_CALL_MIN_INTERVAL}s between AI calls "
+              f"(~{len(cases) * AI_CALL_MIN_INTERVAL / 60:.1f} min for {len(cases)} case(s))\n")
+    else:
+        print()
 
     records: list[dict] = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
@@ -336,7 +382,8 @@ def main() -> None:
     out_path.write_text(json.dumps(
         {
             "run_at": datetime.now().isoformat(timespec="seconds"),
-            "model": settings.GEMINI_MODEL,
+            "provider": settings.AI_PROVIDER,
+            "model": settings.AI_MODEL,
             "total": len(records),
             "passed": sum(1 for r in records if r["passed"]),
             "cases": records,

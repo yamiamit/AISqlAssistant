@@ -46,9 +46,42 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str
 
     # --- AI provider ---
+    # "groq" or "gemini". Groq is the default: its free tier allows far more
+    # requests per day than Gemini's, which matters for the eval harness — a
+    # 40-case run cannot complete even once on gemini-flash-latest's 20/day.
+    # The Gemini path is kept (not deleted) so evals/BASELINE.md, which is
+    # scored on gemini-3.5-flash-lite, stays reproducible.
+    AI_PROVIDER: str = "groq"
+
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-flash-latest"
+
     AI_REQUEST_TIMEOUT_SECONDS: int = 30
+
+    @field_validator("AI_PROVIDER")
+    @classmethod
+    def _validate_ai_provider(cls, value: str) -> str:
+        provider = value.strip().lower()
+        if provider not in {"groq", "gemini"}:
+            raise ValueError(f"must be 'groq' or 'gemini', got {value!r}")
+        return provider
+
+    # Provider-agnostic accessors, so callers that only need "which model is
+    # active?" (the eval runner, logging) don't branch on AI_PROVIDER.
+    @property
+    def AI_MODEL(self) -> str:
+        return self.GROQ_MODEL if self.AI_PROVIDER == "groq" else self.GEMINI_MODEL
+
+    @property
+    def AI_API_KEY(self) -> str:
+        return self.GROQ_API_KEY if self.AI_PROVIDER == "groq" else self.GEMINI_API_KEY
+
+    @property
+    def AI_API_KEY_NAME(self) -> str:
+        return "GROQ_API_KEY" if self.AI_PROVIDER == "groq" else "GEMINI_API_KEY"
 
     # --- Demo database (shared, read-only sample data visitors can try instantly) ---
     # A Postgres connection string loaded with backend/demo/schema.sql + seed.sql.

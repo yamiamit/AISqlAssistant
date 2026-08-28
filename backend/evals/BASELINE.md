@@ -42,6 +42,51 @@ Both numbers are honest. Which to quote depends on the question being asked:
 *"does the generated query match a reference query?"* → 27.5%.
 *"did the user get the right data back?"* → 77.5%.
 
+## Second model: `openai/gpt-oss-120b` (Groq), 2026-08-28
+
+Run `evals/results/20260828T194837.json` — 40 cases, 0 provider failures, ~6 min,
+4 workers paced to one AI call / 8.5s. **This is a valid run.**
+
+```
+exact execution match (runner PASS)    16 / 40    40.0%
+right rows, extra columns              15 / 40    37.5%
+genuinely wrong answer                  9 / 40    22.5%
+never produced runnable SQL             0 / 40     0.0%
+---------------------------------------------------------
+ANSWER-CORRECT (exact + over-selected) 31 / 40    77.5%
+```
+
+**Both models land on exactly 77.5% answer-correct, and on exactly 9 genuinely
+wrong — via completely different cases.**
+
+| Tag | Gemini 3.5-flash-lite | Groq gpt-oss-120b |
+|---|---|---|
+| `aggregation` | 75% | **100%** |
+| `date_reasoning` | 80% | **100%** |
+| `two_table_join` | 100% | 100% |
+| `multi_table_join` | 50% | **67%** |
+| `single_table_filter` | 88% | 75% |
+| `hard_ambiguous` | 60% | **0%** |
+| **overall answer-correct** | **77.5%** | **77.5%** |
+
+What the comparison settles:
+
+- **The weak spot was partly capability.** `multi_table_join` improved 50% → 67%
+  and `aggregation`/`date_reasoning` went to 100% on the larger model. Join depth
+  does track difficulty, as suspected.
+- **But the ceiling is not capability.** A substantially larger model moved cases
+  around without moving the total at all. What it gained on aggregation and joins
+  it gave back on `hard_ambiguous` (3/5 → 0/5) and `single_table_filter`.
+- **`hard_ambiguous` is doing its job.** gpt-oss-120b answers those questions far
+  more expansively — 190 rows where gold returns 10, 189 where gold returns 59.
+  Neither reading is wrong; the questions have no single right answer, which is
+  the entire point of the tag.
+- **Strict match is the more model-sensitive metric** (27.5% → 40.0%) because it
+  partly measures projection style, which differs sharply between models.
+
+Caveat: n=1 per model, and the Gemini pair alone varies ±2.5% run to run (see
+below). Treat 77.5% ≈ 77.5% as "indistinguishable", not "identical".
+
 ## Per-tag breakdown
 
 | Tag | exact | +cols | wrong | total | answer-correct |

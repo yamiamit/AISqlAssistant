@@ -29,6 +29,22 @@ services:
       # undecryptable. To supply your own instead, swap this for `sync: false`.
       - key: ENCRYPTION_KEY
         generateValue: true
+      - key: AI_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false # https://console.groq.com/keys
+      # Verify the id still resolves before deploying -- Groq retires model ids.
+      # List current ones: curl -H "Authorization: Bearer $GROQ_API_KEY" \
+      #   https://api.groq.com/openai/v1/models
+      # Verified working on 2026-08-28 against a current Groq key (JSON mode OK):
+      #   openai/gpt-oss-120b      OK  1.3s   <- chosen (strongest available)
+      #   openai/gpt-oss-20b       OK  1.1s
+      #   qwen/qwen3.8-27b         OK  0.4s   (fastest; good for quick eval slices)
+      #   llama-3.3-70b-versatile  RETIRED -- no longer listed
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      # Only read when AI_PROVIDER=gemini. Kept so the documented eval baseline
+      # (evals/BASELINE.md, scored on gemini-3.5-flash-lite) stays reproducible.
       - key: GEMINI_API_KEY
         sync: false
       # Verified working on 2026-08-26 against a current AI Studio key:
