@@ -73,10 +73,12 @@ flowchart LR
     FE["React SPA"] -- "JWT" --> API["FastAPI backend"]
     API --> AppDB[("App DB (Neon)")]
     API -- "dynamic, per-connection" --> TargetDB[("Your Postgres DB")]
-    API --> Gemini["Gemini API"]
+    API --> AI["AI provider<br/>Groq (default) or Gemini<br/>via ai_service.py"]
 ```
 
-The backend maintains its own metadata database (users, connections, chats, saved queries) separately from the arbitrary external databases users connect to — those are reached through short-lived, per-request connections built from encrypted stored credentials. Full write-up: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Endpoint reference: [`docs/API.md`](docs/API.md).
+The backend maintains its own metadata database (users, connections, chats, saved queries) separately from the arbitrary external databases users connect to — those are reached through short-lived, per-request connections built from encrypted stored credentials.
+
+The AI provider sits behind a single module (`services/ai_service.py`): every call goes through one `_chat_json()` choke point, so switching providers is a one-file change and `AI_PROVIDER` selects between them at startup. Full write-up: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Endpoint reference: [`docs/API.md`](docs/API.md).
 
 ## Evaluation
 

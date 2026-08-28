@@ -19,8 +19,11 @@ Three free-tier services, deployed independently: **Neon** (app database), **Ren
    | `APP_DATABASE_URL` | Neon connection string from step 1 |
    | `JWT_SECRET_KEY` | Render can auto-generate this (see `render.yaml`) |
    | `ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
-   | `GEMINI_API_KEY` | Your Gemini API key |
-   | `GEMINI_MODEL` | `gemini-2.5-flash` |
+   | `AI_PROVIDER` | `groq` (default) or `gemini` |
+   | `GROQ_API_KEY` | Your Groq API key — https://console.groq.com/keys |
+   | `GROQ_MODEL` | `openai/gpt-oss-120b` (verify it still resolves — Groq retires ids: `curl -H "Authorization: Bearer $GROQ_API_KEY" https://api.groq.com/openai/v1/models`) |
+   | `GEMINI_API_KEY` | Only if `AI_PROVIDER=gemini` |
+   | `GEMINI_MODEL` | Only if `AI_PROVIDER=gemini`. Use `gemini-3.6-flash` — `gemini-2.5-flash` now 404s as "no longer available to new users" |
    | `CORS_ORIGINS` | Your Vercel URL, e.g. `https://ai-sql-assistant.vercel.app` |
    | `SQL_STATEMENT_TIMEOUT_MS` | `10000` |
    | `SQL_DEFAULT_ROW_LIMIT` | `500` |
