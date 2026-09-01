@@ -17,6 +17,10 @@ export interface DBConnection {
   username: string;
   ssl_mode: string;
   is_demo: boolean;
+  // null = never probed (a connection saved before scoped access existed).
+  // Deliberately not defaulted to false: "unknown" and "read-only" are
+  // different claims and the UI shouldn't make the safer-sounding one for free.
+  has_write_access: boolean | null;
   schema_updated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -44,6 +48,14 @@ export interface SchemaTable {
 
 export interface SchemaResponse {
   tables: SchemaTable[];
+}
+
+export interface AccessScript {
+  role: string;
+  password: string;
+  tables: string[];
+  script: string;
+  connection_string: string;
 }
 
 export type ChartType = "bar" | "line" | "pie" | null;

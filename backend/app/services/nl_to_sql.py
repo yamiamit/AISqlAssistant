@@ -80,6 +80,16 @@ def run_nl_to_sql(
             raise QueryExecutionError(
                 "Could not reach the connected database to read its schema — it may be offline."
             ) from exc
+        if not schema.get("tables"):
+            # Reachable since introspection became privilege-filtered: a role
+            # that can connect but was granted SELECT on nothing. Generating
+            # against an empty schema would hand the model no tables and produce
+            # a confident hallucination, so stop here with the real reason.
+            raise QueryExecutionError(
+                "This connection's role can't read any tables. Check its SELECT grants, "
+                "then refresh the schema."
+            )
+
         outcome.schema_text = schema_to_prompt_text(schema)
 
         try:

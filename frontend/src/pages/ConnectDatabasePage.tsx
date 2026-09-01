@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Database, Sparkles } from "lucide-react";
+import { Plus, Database, ShieldAlert, Sparkles } from "lucide-react";
 import { useConnections } from "../context/ConnectionContext";
 import * as connectionsApi from "../api/connections";
 import ConnectionList from "../components/connections/ConnectionList";
 import ConnectionForm from "../components/connections/ConnectionForm";
+import ScopedAccessPanel from "../components/connections/ScopedAccessPanel";
 import Modal from "../components/common/Modal";
 import Button from "../components/common/Button";
 import EmptyState from "../components/common/EmptyState";
@@ -18,6 +19,7 @@ export default function ConnectDatabasePage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<DBConnection | undefined>(undefined);
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
+  const [scoping, setScoping] = useState<DBConnection | undefined>(undefined);
   const [isTryingDemo, setIsTryingDemo] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
 
@@ -51,6 +53,11 @@ export default function ConnectDatabasePage() {
     }
   }
 
+  async function handleScoped() {
+    setScoping(undefined);
+    await refresh();
+  }
+
   async function handleTryDemo() {
     setDemoError(null);
     setIsTryingDemo(true);
@@ -67,6 +74,10 @@ export default function ConnectDatabasePage() {
       setIsTryingDemo(false);
     }
   }
+
+  // `has_write_access === true` only — null means the connection predates the
+  // privilege probe, and warning about something never measured would be noise.
+  const unscoped = connections.filter((conn) => !conn.is_demo && conn.has_write_access === true);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -86,6 +97,25 @@ export default function ConnectDatabasePage() {
           </Button>
         </div>
       </div>
+
+      {unscoped.length > 0 && (
+        <div className="mb-5 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            {unscoped.length === 1
+              ? `"${unscoped[0].name}" connects with credentials that can modify data.`
+              : `${unscoped.length} connections use credentials that can modify data.`}{" "}
+            Queries still run read-only, but the AI can see every table on the database.{" "}
+            <button
+              onClick={() => setScoping(unscoped[0])}
+              className="font-medium underline underline-offset-2 hover:no-underline"
+            >
+              Restrict access
+            </button>{" "}
+            to scope {unscoped.length === 1 ? "it" : "them"} to the tables you choose.
+          </span>
+        </div>
+      )}
 
       {demoError && (
         <div className="mb-5">
@@ -119,8 +149,19 @@ export default function ConnectDatabasePage() {
           onEdit={openEdit}
           onDelete={handleDelete}
           onRefreshSchema={handleRefreshSchema}
+          onRestrictAccess={setScoping}
           refreshingId={refreshingId}
         />
+      )}
+
+      {scoping && (
+        <Modal title={`Restrict access — ${scoping.name}`} onClose={() => setScoping(undefined)} wide>
+          <ScopedAccessPanel
+            connection={scoping}
+            onScoped={handleScoped}
+            onDismiss={() => setScoping(undefined)}
+          />
+        </Modal>
       )}
 
       {formOpen && (

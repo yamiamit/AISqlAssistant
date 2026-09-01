@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { Database, LogOut, MessageSquarePlus, MessagesSquare, FileUp, Star, TableProperties } from "lucide-react";
+import { Database, LogOut, MessageSquarePlus, MessagesSquare, Star, TableProperties } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 const navItems = [
@@ -9,7 +9,6 @@ const navItems = [
   { to: "/app/saved-queries", label: "Saved Queries", icon: Star },
   { to: "/app/connections", label: "Database Connection", icon: Database },
   { to: "/app/schema", label: "Schema Viewer", icon: TableProperties },
-  { to: "/app/upload-pdf", label: "Upload PDF", icon: FileUp },
 ];
 
 export default function Sidebar() {

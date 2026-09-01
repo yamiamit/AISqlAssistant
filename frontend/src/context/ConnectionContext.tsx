@@ -13,7 +13,7 @@ interface ConnectionContextValue {
 const ConnectionContext = createContext<ConnectionContextValue | undefined>(undefined);
 
 // Shared across every dashboard page so "which database am I querying?"
-// stays consistent between the Chat, Schema Viewer, and PDF Upload pages
+// stays consistent between the Chat and Schema Viewer pages
 // without each one re-fetching the connection list independently.
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connections, setConnections] = useState<DBConnection[]>([]);

@@ -48,9 +48,24 @@ class DBConnectionResponse(BaseModel):
     username: str
     ssl_mode: str
     is_demo: bool
+    has_write_access: bool | None
     schema_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class AccessScriptRequest(BaseModel):
+    # None means "every table the connection can currently read" -- the common
+    # case, and what the UI sends until a table picker exists.
+    tables: list[str] | None = None
+
+
+class AccessScriptResponse(BaseModel):
+    role: str
+    password: str
+    tables: list[str]
+    script: str
+    connection_string: str
 
 
 class TestConnectionResult(BaseModel):

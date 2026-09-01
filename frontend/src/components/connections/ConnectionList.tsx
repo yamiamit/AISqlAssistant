@@ -1,4 +1,4 @@
-import { Database, Pencil, RefreshCw, Sparkles, Trash2 } from "lucide-react";
+import { Database, Pencil, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import type { DBConnection } from "../../types";
 import Card from "../common/Card";
 import Button from "../common/Button";
@@ -8,10 +8,18 @@ interface ConnectionListProps {
   onEdit: (conn: DBConnection) => void;
   onDelete: (conn: DBConnection) => void;
   onRefreshSchema: (conn: DBConnection) => void;
+  onRestrictAccess: (conn: DBConnection) => void;
   refreshingId: number | null;
 }
 
-export default function ConnectionList({ connections, onEdit, onDelete, onRefreshSchema, refreshingId }: ConnectionListProps) {
+export default function ConnectionList({
+  connections,
+  onEdit,
+  onDelete,
+  onRefreshSchema,
+  onRestrictAccess,
+  refreshingId,
+}: ConnectionListProps) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {connections.map((conn) => (
@@ -29,6 +37,16 @@ export default function ConnectionList({ connections, onEdit, onDelete, onRefres
                       <Sparkles className="h-2.5 w-2.5" /> Sample data
                     </span>
                   )}
+                  {!conn.is_demo && conn.has_write_access === true && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-500">
+                      <ShieldAlert className="h-2.5 w-2.5" /> Full access
+                    </span>
+                  )}
+                  {!conn.is_demo && conn.has_write_access === false && (
+                    <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-500">
+                      <ShieldCheck className="h-2.5 w-2.5" /> Read-only role
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500">
                   {conn.is_demo
@@ -44,12 +62,15 @@ export default function ConnectionList({ connections, onEdit, onDelete, onRefres
             {conn.schema_updated_at ? new Date(conn.schema_updated_at).toLocaleString() : "never"}
           </p>
 
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" onClick={() => onRefreshSchema(conn)} isLoading={refreshingId === conn.id}>
               <RefreshCw className="h-3.5 w-3.5" /> Refresh Schema
             </Button>
             {!conn.is_demo && (
               <>
+                <Button size="sm" variant="secondary" onClick={() => onRestrictAccess(conn)}>
+                  <ShieldCheck className="h-3.5 w-3.5" /> Restrict access
+                </Button>
                 <Button size="sm" variant="secondary" onClick={() => onEdit(conn)}>
                   <Pencil className="h-3.5 w-3.5" /> Edit
                 </Button>

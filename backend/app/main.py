@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import auth, chat, connections, export, pdf, saved_queries
+from app.api.routes import auth, chat, connections, export, saved_queries
 from app.config import settings
 from app.database import Base, engine
 from app.models import *  # noqa: F401,F403 - ensures all models are registered on Base.metadata
@@ -38,7 +38,6 @@ app.include_router(auth.router)
 app.include_router(connections.router)
 app.include_router(chat.router)
 app.include_router(saved_queries.router)
-app.include_router(pdf.router)
 app.include_router(export.router)
 
 

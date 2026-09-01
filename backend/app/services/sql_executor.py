@@ -4,6 +4,11 @@ database with several safety nets beyond the allow-list check in
 sql_validator: a hard statement timeout, and `SET TRANSACTION READ ONLY`
 so even a validator bypass couldn't mutate data within this transaction.
 
+Table-level access is not enforced here at all — that is the connecting role's
+grants, and a query reaching a table outside them fails with Postgres 42501,
+which this module translates into a message about the connection's allowed set
+rather than a raw permission error.
+
 Each call opens a short-lived engine/connection and disposes it immediately —
 target databases are arbitrary and infrequent, so a long-lived pool per
 connection isn't worth the complexity here.
@@ -60,6 +65,27 @@ def _json_safe(value):
     return str(value)
 
 
+def rejection_message(exc: SQLAlchemyError) -> str:
+    """
+    Turn a Postgres rejection into the message the user sees.
+
+    Split out from execute_query so it can be tested without a database: the
+    interesting behaviour is which of two very different situations an error
+    represents, and that is decidable from the error alone.
+    """
+    orig = getattr(exc, "orig", None)
+    # 42501 = insufficient_privilege. On a scoped connection this is not a
+    # malformed query but an out-of-bounds one: the validator passed it and
+    # Postgres refused it. Worth distinguishing, because the raw text
+    # ("permission denied for table users") reads like a bug in the app rather
+    # than the access boundary working exactly as configured.
+    if getattr(orig, "pgcode", None) == "42501":
+        return "That table isn't in your connection's allowed set."
+    # Other Postgres error messages (via psycopg2) are already human-readable
+    # (e.g. 'column "foo" does not exist') — surface them directly.
+    return f"The database rejected the query: {orig if orig is not None else exc}"
+
+
 def execute_query(url: str, sql: str, statement_timeout_ms: int = 10_000) -> QueryResult:
     # statement_timeout is set via SQL (below), not as a libpq startup "options"
     # connect_arg — Neon's pooled (PgBouncer) connections reject startup-time
@@ -87,9 +113,7 @@ def execute_query(url: str, sql: str, statement_timeout_ms: int = 10_000) -> Que
             "Could not reach the database — it may be offline or the connection details are stale."
         ) from exc
     except SQLAlchemyError as exc:
-        # Postgres error messages (via psycopg2) are already human-readable
-        # (e.g. 'column "foo" does not exist') — surface them directly.
-        raise QueryExecutionError(f"The database rejected the query: {str(exc.orig) if hasattr(exc, 'orig') else exc}") from exc
+        raise QueryExecutionError(rejection_message(exc)) from exc
     finally:
         engine.dispose()
 

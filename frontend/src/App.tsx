@@ -7,7 +7,6 @@ import ChatHistoryPage from "./pages/ChatHistoryPage";
 import SavedQueriesPage from "./pages/SavedQueriesPage";
 import ConnectDatabasePage from "./pages/ConnectDatabasePage";
 import SchemaViewerPage from "./pages/SchemaViewerPage";
-import PdfUploadPage from "./pages/PdfUploadPage";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 
 export default function App() {
@@ -30,7 +29,6 @@ export default function App() {
         <Route path="saved-queries" element={<SavedQueriesPage />} />
         <Route path="connections" element={<ConnectDatabasePage />} />
         <Route path="schema" element={<SchemaViewerPage />} />
-        <Route path="upload-pdf" element={<PdfUploadPage />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/app" replace />} />

@@ -1,18 +1,18 @@
 # AI SQL Assistant
 
-Ask your PostgreSQL database questions in plain English. Connect your own database, get AI-generated SQL you can trust (validated, read-only, explained), see results as tables and charts, upload PDFs to populate tables, and keep a full history of every conversation.
+Ask your PostgreSQL database questions in plain English. Connect your own database, get AI-generated SQL you can trust (validated, read-only, explained), see results as tables and charts, and keep a full history of every conversation.
 
 Built as a full-stack portfolio project to demonstrate practical AI integration, backend/database engineering, authentication, and secure SQL execution — deliberately scoped to stay understandable end-to-end rather than reaching for infrastructure it doesn't need.
 
 ## Features
 
 - **Auth** — register/login with JWT, bcrypt-hashed passwords, each user's data (connections, chats, saved queries) fully isolated.
-- **Bring your own database** — connect any PostgreSQL database by host/port/credentials or a connection string; schema (tables, columns, primary keys, foreign keys) is discovered automatically via `SQLAlchemy.inspect()` and cached.
+- **Bring your own database** — connect any PostgreSQL database by host/port/credentials or a connection string; schema (tables, columns, primary keys, foreign keys) is discovered automatically and cached — filtered to the tables the connecting role can actually `SELECT`, so a restricted role yields a restricted schema.
 - **Natural language → SQL** — every prompt is turned into SQL grounded in your actual schema, explained in plain English, and shown with copy/collapse controls.
 - **Secure SQL execution** — an allow-list validator permits only `SELECT`/`WITH` queries, blocks stacked statements and a keyword blocklist (`INSERT`, `DROP`, `pg_sleep`, ...), and forces a row `LIMIT`; execution itself runs inside a read-only transaction with a hard statement timeout.
+- **Scoped access** — those layers control what *kind* of query runs, never what data it touches. Tick the tables a connection should expose (with warnings when you'd sever a foreign key the AI needs for joins) and the app generates the `CREATE ROLE`/`GRANT` script for you to run yourself; paste the new connection string back and the boundary holds end to end — introspection hides the rest, the AI is never shown them, and a query that reaches one is refused by Postgres. Connections that can still write are detected and flagged.
 - **Results, charts, exports** — a result table plus an auto-suggested bar/line/pie chart (switchable), with CSV, PNG, and formatted-PDF-report export.
 - **Chat history & saved queries** — every turn (prompt, SQL, explanation, results, chart, timestamp) is persisted; search and delete conversations, or bookmark a query to re-run later.
-- **PDF → structured data** — upload an invoice/product list/sales report, the AI extracts structured records into an **editable preview** you approve before anything is inserted (parameterized, never string-built SQL).
 - **Schema Viewer** — a dedicated page listing every table's columns, primary keys, and foreign keys.
 - **Polished UX** — responsive SaaS-style dashboard, dark mode, loading states, and a typing indicator while the AI responds.
 
@@ -39,7 +39,7 @@ Click **"Try with sample data"** on the Connect Database page to start chatting 
 | Database | PostgreSQL (Neon in production) |
 | Auth | JWT (PyJWT) + bcrypt (passlib) |
 | AI | Groq (`openai/gpt-oss-120b`, JSON-mode); Gemini selectable via `AI_PROVIDER` |
-| PDF | pdfplumber (extraction), ReportLab + Matplotlib (report generation) |
+| PDF | ReportLab + Matplotlib (report generation) |
 | Deployment | Vercel (frontend), Render (backend), Neon (database) |
 
 No Docker, Kubernetes, microservices, Kafka, or Redis — this is a standard three-tier app, kept intentionally simple to build in 2-3 weeks and explain confidently in an interview. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram and the reasoning behind it.
@@ -53,15 +53,16 @@ AISqlAssistant/
       api/           axios client + one module per resource
       context/        Auth, Theme, Connection (React Context, no Redux)
       pages/          one file per route
-      components/     grouped by feature (chat, connections, pdf, schema, savedQueries, common)
+      components/     grouped by feature (chat, connections, schema, savedQueries, common)
   backend/      FastAPI + SQLAlchemy
     app/
       models/         SQLAlchemy ORM models
       schemas/        Pydantic request/response models
       core/           security (hashing, JWT) + shared dependencies
-      services/       AI, SQL validation/execution, schema discovery, encryption, PDF, export
+      services/       AI, SQL validation/execution, schema discovery, encryption, export
       api/routes/      one router per resource
     evals/         offline text-to-SQL eval harness (dev-time only, not imported by app/)
+    tests/         pytest unit tests (no DB, no network)
   database/     sample e-commerce schema + seed data + load instructions
   docs/         architecture diagram, API reference, deployment guide, screenshots
 ```
@@ -217,7 +218,7 @@ Grading rules, known blind spots, and the failure taxonomy are in
 - Python 3.11+
 - Node.js 20+
 - A PostgreSQL database (local install, Docker, or a free [Neon](https://neon.tech) project) — you need **two**: one for the app's own data, one to use as the "connected" target database (or reuse the [sample e-commerce database](database/README.md))
-- A [Groq API key](https://console.groq.com/keys) (only required for AI SQL generation and PDF extraction — everything else works without one). Groq is the default because its free tier allows enough requests per day to run the eval harness repeatedly; set `AI_PROVIDER=gemini` with a [Gemini key](https://aistudio.google.com/app/apikey) to use Gemini instead.
+- A [Groq API key](https://console.groq.com/keys) (only required for AI SQL generation — everything else works without one). Groq is the default because its free tier allows enough requests per day to run the eval harness repeatedly; set `AI_PROVIDER=gemini` with a [Gemini key](https://aistudio.google.com/app/apikey) to use Gemini instead.
 
 ### Backend
 
@@ -281,19 +282,20 @@ Frontend → Vercel, backend → Render, app database → Neon. Config files (`f
 
 ## Code Quality
 
-- **Clean architecture**: routes stay thin — all business logic (SQL validation, AI calls, schema discovery, PDF parsing) lives in single-purpose `services/` modules that are independently testable and independently explainable.
-- **Security by construction**: passwords bcrypt-hashed; target-DB credentials Fernet-encrypted at rest; SQL allow-listed, forced-`LIMIT`, read-only-transaction, and statement-timeout as layered defenses; PDF-driven inserts always parameterized.
+- **Clean architecture**: routes stay thin — all business logic (SQL validation, AI calls, schema discovery, exports) lives in single-purpose `services/` modules that are independently testable and independently explainable.
+- **Security by construction**: passwords bcrypt-hashed; target-DB credentials Fernet-encrypted at rest; SQL allow-listed, forced-`LIMIT`, read-only-transaction, and statement-timeout as layered defenses.
 - **Typed end-to-end**: Pydantic schemas on the backend, TypeScript interfaces on the frontend mirroring them.
-- **Every failure mode has a home**: invalid SQL, empty results, bad credentials, AI timeouts, an offline database, and unparseable PDFs each produce a specific, human-readable message instead of a generic error.
+- **Every failure mode has a home**: invalid SQL, empty results, bad credentials, AI timeouts, and an offline database each produce a specific, human-readable message instead of a generic error.
 - **The AI step is measured, not assumed**: a 40-case execution-match eval harness with a tested grader, two models benchmarked side by side, and honestly stated blind spots — see [Evaluation](#evaluation).
+- **The security-critical modules are unit-tested**: 90 hermetic pytest cases over `sql_validator` (stacked statements, data-modifying CTEs, keyword-in-literal false positives, the outer-vs-subquery row cap) and the scoped-access helpers — plus tests that pin each module's *documented* limitations, so a future change can't widen them silently. Four further integration tests assert what Postgres itself does about grants, and skip unless `TEST_DATABASE_URL` points at a throwaway database (`backend/tests/`).
 
 ## Future Improvements
 
 - Refresh tokens / server-side session invalidation (current auth is stateless JWT — simple, but "logout" only clears the client-side token)
 - Streaming AI responses instead of a single request/response round trip
 - Multi-database "join across connections" queries
-- Role-based read-only database credentials enforced at the Postgres level, not just the app layer
-- Automated test suite (pytest for the backend services, Vitest/RTL for frontend components) — the eval harness covers the AI → SQL path only
+- A guided flow for creating a restricted role (generate the `CREATE ROLE`/`GRANT` script from a table picker) — the enforcement already works today, but the role has to be created by hand
+- Extend the test suite beyond `sql_validator` (76 pytest cases today) to the other services, plus Vitest/RTL for frontend components
 - Harden the baseline: repeat runs for variance (currently n=1, one model), order-aware grading for top-N questions, and more cases per tag
 
 ## Interview Talking Points
@@ -302,10 +304,9 @@ This project is designed so each of these is a two-minute answer, not a slide:
 
 - **Auth flow** — registration → bcrypt hash → JWT issuance → Bearer-token verification on every request (`core/security.py`, `core/deps.py`)
 - **Dynamic database connections** — why the app maintains two separate Postgres roles (its own metadata DB vs. arbitrary target DBs) and how credentials are encrypted at rest and decrypted only to open a short-lived connection (`services/target_db.py`, `services/encryption.py`)
-- **Schema discovery** — using `SQLAlchemy.inspect()` instead of hand-written `information_schema` queries (`services/schema_introspector.py`)
+- **Schema discovery** — `SQLAlchemy.inspect()` for columns and constraints, but one hand-written catalog query for the table list: `pg_catalog.pg_class` is world-readable, so reflecting as a restricted role still returns every table unless you filter on `has_table_privilege()` (`services/schema_introspector.py`)
 - **Prompt engineering** — how the schema gets serialized into the AI prompt, why JSON-mode + a few-shot example keeps output parseable (`utils/prompt_templates.py`)
-- **SQL validation** — the layered defense between "AI-generated text" and "SQL that actually runs" (`services/sql_validator.py`, `services/sql_executor.py`)
-- **PDF → DB pipeline** — why extraction and insertion are two separate API calls, with the editable preview as the safety gate in between (`api/routes/pdf.py`)
+- **SQL validation** — the layered defense between "AI-generated text" and "SQL that actually runs", and why the app layer can only ever police the *shape* of a query while table-level access has to come from Postgres grants (`services/sql_validator.py`, `services/sql_executor.py`)
 - **Chart selection** — a small rule-based heuristic instead of another AI call (`utils/chart_suggester.py`) — a deliberate simplicity trade-off
 - **Evaluating the AI** — why execution match beats string comparison, why the benchmark reports strict *and* answer-correct rather than one number, and what it means that two very different models both land on 77.5% answer-correct from different cases (`backend/evals/`)
 - **Reading a benchmark honestly** — why a run can be *void* rather than bad (the `NOT A VALID BASELINE` guard), why a rate limit mislabelled as a timeout sent hours of debugging at the wrong fix, and why the harness paces itself against a tokens-per-minute cap

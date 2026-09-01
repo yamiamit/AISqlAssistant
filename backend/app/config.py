@@ -95,10 +95,6 @@ class Settings(BaseSettings):
     # --- CORS ---
     CORS_ORIGINS: str = "http://localhost:5173"
 
-    # --- File uploads ---
-    UPLOAD_DIR: str = "uploads"
-    MAX_UPLOAD_SIZE_MB: int = 15
-
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def _validate_jwt_secret(cls, value: str) -> str:

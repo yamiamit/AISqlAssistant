@@ -42,16 +42,24 @@ This is the one architectural idea worth explaining clearly in an interview:
 
 `POST /api/chat/query` (`backend/app/api/routes/chat.py`) orchestrates five independently testable modules, each of which turns its own failure mode into a friendly, persisted error message instead of a raw 500:
 
-1. **Schema discovery** (`schema_introspector.py`) — `SQLAlchemy.inspect()` on the target DB, cached on the `DBConnection` row.
+1. **Schema discovery** (`schema_introspector.py`) — the table list comes from a `has_table_privilege()`-filtered `pg_class` query, then `SQLAlchemy.inspect()` reflects columns and constraints for those names; foreign keys pointing outside the readable set are pruned. Cached on the `DBConnection` row. The filter is what makes a restricted role produce a restricted prompt — SQLAlchemy's own `get_table_names()` reads world-readable `pg_class` and would list every table regardless of grants.
 2. **AI generation** (`ai_service.py`) — schema + prompt + short conversation history → provider JSON-mode call → `{sql, explanation}`. Groq and Gemini are both implemented behind one `_chat_json()` entry point; `AI_PROVIDER` picks which, and both raise the same error vocabulary so the eval harness classifies failures identically.
 3. **SQL validation** (`sql_validator.py`) — allow-list check (SELECT/WITH only, no stacked statements, keyword blocklist, forced `LIMIT`).
-4. **Execution** (`sql_executor.py`) — short-lived connection, `SET TRANSACTION READ ONLY`, Postgres `statement_timeout`, JSON-safe row serialization.
+4. **Execution** (`sql_executor.py`) — short-lived connection, `SET TRANSACTION READ ONLY`, Postgres `statement_timeout`, JSON-safe row serialization. Table-level access is the connecting role's grants, not this module's business; a query reaching outside them comes back as Postgres 42501, which is translated into a message about the connection's allowed set.
 5. **Persistence** — the full turn (prompt, SQL, explanation, results, chart type, timing) is saved as one `Message` row so chat history is just a normal read query.
 
-## PDF ingestion pipeline
+## Scoped access
 
-`POST /api/pdf/upload` extracts text (`pdfplumber`) and asks the AI to structure it into JSON records matching the target table's real columns (from the same schema cache used above) — nothing is written yet. The frontend shows an editable preview grid; only when the user calls `POST /api/pdf/confirm` does `pdf_service.insert_records()` run a parameterized bulk `INSERT` (bound parameters, never string-built SQL) inside a transaction.
+The three SQL guards (allow-list validator, forced `LIMIT`, read-only transaction) constrain the *shape* of a query; none of them can stop a well-formed `SELECT password_hash FROM users`. Table-level access is therefore delegated to Postgres itself.
+
+The user picks tables from a checkbox list built from the cached schema. Because the backend prunes foreign keys pointing outside the readable set, deselecting a join target doesn't break queries — it silently removes the relationship from the AI's view, so the picker flags those gaps (`components/connections/scopeSelection.ts`) and offers to pull the referenced tables back in rather than auto-correcting a choice the user may have meant.
+
+The chosen list is deliberately not persisted. After the DSN swap, introspection runs as the new role and the cached schema *becomes* the allowed set; a second stored list would only be a copy that can drift, and would misreport anyone who picks tables and never runs the script.
+
+`services/access_script.py` generates a `CREATE ROLE` / `GRANT SELECT` script — quoted identifiers, generated password, no write grants — which the **user** runs; the app never holds role-creation privileges and never executes it. Pasting the new DSN back goes through the ordinary `PUT /api/connections/{id}`, which re-introspects as the new role, and that is what narrows the schema.
+
+`detect_write_access()` records whether the connecting role can still INSERT/UPDATE/DELETE anywhere in `public`, cached on `DBConnection.has_write_access` (null = never probed) to drive the warning banner. It is a prompt to scope, not a control — `SET TRANSACTION READ ONLY` is what actually prevents writes.
 
 ## Frontend structure
 
-React Context (`AuthContext`, `ThemeContext`, `ConnectionContext`) instead of Redux/Zustand — there's little enough shared state that a reducer library would be pure overhead. Pages own their own data fetching via a thin `api/*.ts` layer that wraps `axios` with a JWT interceptor; components are grouped by feature (`components/chat`, `components/connections`, `components/pdf`, ...) rather than by type.
+React Context (`AuthContext`, `ThemeContext`, `ConnectionContext`) instead of Redux/Zustand — there's little enough shared state that a reducer library would be pure overhead. Pages own their own data fetching via a thin `api/*.ts` layer that wraps `axios` with a JWT interceptor; components are grouped by feature (`components/chat`, `components/connections`, `components/schema`, ...) rather than by type.

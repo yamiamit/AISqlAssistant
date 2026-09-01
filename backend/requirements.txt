@@ -8,12 +8,13 @@ email-validator==2.2.0
 pyjwt==2.10.1
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-python-multipart==0.0.20
 python-dotenv==1.0.1
 cryptography==44.0.0
 sqlparse==0.5.3
 groq==1.7.0
 google-generativeai==0.8.3
-pdfplumber==0.11.4
 reportlab==4.2.5
 matplotlib==3.10.0
+
+# --- dev only (not imported by app/) ---
+pytest==9.1.1

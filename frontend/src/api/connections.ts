@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { DBConnection, SchemaResponse } from "../types";
+import type { AccessScript, DBConnection, SchemaResponse } from "../types";
 
 export interface DBConnectionInput {
   name: string;
@@ -42,6 +42,15 @@ export function deleteConnection(id: number) {
 
 export function getSchema(id: number) {
   return apiClient.get<SchemaResponse>(`/api/connections/${id}/schema`).then((res) => res.data);
+}
+
+// Generates (server-side, never runs) the CREATE ROLE / GRANT script that
+// scopes this connection. `tables` omitted means every currently-readable table.
+// The password comes back exactly once and is not stored anywhere.
+export function generateAccessScript(id: number, tables?: string[]) {
+  return apiClient
+    .post<AccessScript>(`/api/connections/${id}/access-script`, { tables: tables ?? null })
+    .then((res) => res.data);
 }
 
 export function refreshSchema(id: number) {

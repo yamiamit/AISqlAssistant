@@ -14,7 +14,7 @@ import json
 import groq
 
 from app.config import settings
-from app.utils.prompt_templates import build_pdf_extraction_messages, build_sql_generation_messages
+from app.utils.prompt_templates import build_sql_generation_messages
 
 
 class AIServiceError(Exception):
@@ -48,17 +48,6 @@ def generate_sql(schema_text: str, user_prompt: str, history: list[dict] | None 
         raise AIServiceError("The AI response didn't include a usable SQL query. Try rephrasing your question.")
 
     return {"sql": data["sql"].strip(), "explanation": data.get("explanation", "").strip()}
-
-
-def extract_pdf_records(target_columns: list[str], document_text: str) -> list[dict]:
-    """Returns a list of record dicts, keyed by target_columns, extracted from document_text."""
-    messages = build_pdf_extraction_messages(target_columns, document_text)
-    data = _chat_json(messages)
-
-    records = data.get("records")
-    if not isinstance(records, list):
-        raise AIServiceError("The AI could not extract structured records from this PDF.")
-    return records
 
 
 def _chat_json(messages: list[dict]) -> dict:

@@ -14,15 +14,17 @@ from app.database import get_db
 from app.models.db_connection import DBConnection
 from app.models.user import User
 from app.schemas.connection import (
+    AccessScriptRequest,
+    AccessScriptResponse,
     DBConnectionCreate,
     DBConnectionResponse,
     DBConnectionUpdate,
     SchemaResponse,
     TestConnectionResult,
 )
-from app.services import target_db
+from app.services import access_script, target_db
 from app.services.encryption import encrypt_value
-from app.services.schema_introspector import discover_schema
+from app.services.schema_introspector import detect_write_access, discover_schema
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
@@ -198,6 +200,75 @@ def refresh_schema(connection_id: int, db: Session = Depends(get_db), user: User
     return schema
 
 
+@router.post("/{connection_id}/access-script", response_model=AccessScriptResponse)
+def create_access_script(
+    connection_id: int,
+    payload: AccessScriptRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Generate (but never run) a CREATE ROLE / GRANT script scoping this
+    connection to `payload.tables`.
+
+    The password is generated here and returned exactly once. It is deliberately
+    not stored: until the user has actually run the script the role does not
+    exist, and persisting a credential for a role that may never be created is
+    all cost and no benefit. It reaches the database the ordinary way, when the
+    user pastes the new connection string into PUT /api/connections/{id}.
+    """
+    conn = _get_owned_connection(db, connection_id, user)
+    if conn.is_demo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The sample database is shared, so its access can't be restricted.",
+        )
+
+    readable = [table["name"] for table in (conn.cached_schema or {}).get("tables", [])]
+    if not readable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No tables are known for this connection yet. Refresh the schema first.",
+        )
+
+    requested = payload.tables if payload.tables is not None else readable
+    unknown = [table for table in requested if table not in readable]
+    if unknown:
+        # Not merely a typo guard: this is what keeps arbitrary text out of a
+        # GRANT statement the user is about to run with elevated privileges.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown table(s) for this connection: {', '.join(sorted(unknown))}. Refresh the schema and try again.",
+        )
+
+    role = access_script.role_name_for(conn.id)
+    password = access_script.generate_password()
+    # Preserve the caller's ordering but drop duplicates.
+    tables = list(dict.fromkeys(requested))
+
+    try:
+        script = access_script.build_access_script(
+            database=conn.database_name, role=role, password=password, tables=tables
+        )
+    except access_script.AccessScriptError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    return AccessScriptResponse(
+        role=role,
+        password=password,
+        tables=tables,
+        script=script,
+        connection_string=access_script.connection_string_hint(
+            host=conn.host,
+            port=conn.port,
+            database=conn.database_name,
+            role=role,
+            password=password,
+            ssl_mode=conn.ssl_mode,
+        ),
+    )
+
+
 @router.get("/{connection_id}/schema", response_model=SchemaResponse)
 def get_schema(connection_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     conn = _get_owned_connection(db, connection_id, user)
@@ -208,8 +279,9 @@ def get_schema(connection_id: int, db: Session = Depends(get_db), user: User = D
 
 def _refresh_schema_inplace(db: Session, conn: DBConnection) -> dict:
     """Re-introspect the target DB and persist the result on the connection row."""
+    url = target_db.url_from_connection(conn)
     try:
-        schema = discover_schema(target_db.url_from_connection(conn))
+        schema = discover_schema(url)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -218,5 +290,12 @@ def _refresh_schema_inplace(db: Session, conn: DBConnection) -> dict:
 
     conn.cached_schema = schema
     conn.schema_updated_at = datetime.now(timezone.utc)
+    # Best-effort: a connection whose schema read succeeded but whose privilege
+    # probe failed is still perfectly usable, and a warning banner is not worth
+    # failing the whole refresh over. None reads as "unknown" in the UI.
+    try:
+        conn.has_write_access = detect_write_access(url)
+    except Exception:  # noqa: BLE001
+        conn.has_write_access = None
     db.commit()
     return schema

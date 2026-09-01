@@ -22,6 +22,7 @@ All routes except `/api/auth/register` and `/api/auth/login` require `Authorizat
 | PUT | `/api/connections/{id}` | Edit a connection (re-discovers schema) |
 | DELETE | `/api/connections/{id}` | Remove a connection |
 | GET | `/api/connections/{id}/schema` | Return cached schema (tables/columns/PKs/FKs) |
+| POST | `/api/connections/{id}/access-script` | `{ tables }` (null = all readable) → generated `CREATE ROLE`/`GRANT` script, role name, one-time password, and connection string. Never executed server-side |
 | POST | `/api/connections/{id}/refresh-schema` | Force a fresh schema discovery |
 
 ## Chat — `chat.py`
@@ -42,13 +43,6 @@ All routes except `/api/auth/register` and `/api/auth/login` require `Authorizat
 | GET | `/api/saved-queries` | List saved queries |
 | POST | `/api/saved-queries` | Save a query (name, prompt, SQL) |
 | DELETE | `/api/saved-queries/{id}` | Delete a saved query |
-
-## PDF ingestion — `pdf.py`
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/pdf/upload` | multipart: `file`, `db_connection_id`, `target_table` → extracted preview (nothing inserted yet) |
-| POST | `/api/pdf/confirm` | `{ db_connection_id, target_table, records }` → parameterized bulk insert |
 
 ## Export — `export.py`
 
