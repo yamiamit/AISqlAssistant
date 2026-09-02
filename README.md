@@ -60,9 +60,11 @@ AISqlAssistant/
       schemas/        Pydantic request/response models
       core/           security (hashing, JWT) + shared dependencies
       services/       AI, SQL validation/execution, schema discovery, encryption, export
+      utils/          prompt templates + the chart-suggestion heuristic
       api/routes/      one router per resource
+    demo/          shared read-only dataset behind "Try with sample data"
     evals/         offline text-to-SQL eval harness (dev-time only, not imported by app/)
-    tests/         pytest unit tests (no DB, no network)
+    tests/         pytest suite — hermetic by default; the grant tests skip without TEST_DATABASE_URL
   database/     sample e-commerce schema + seed data + load instructions
   docs/         architecture diagram, API reference, deployment guide, screenshots
 ```
@@ -254,6 +256,19 @@ psql -d demo_ecommerce -f database/seed_data.sql
 
 Then connect to it from the app's "Connect Database" page. See [`database/README.md`](database/README.md) for Neon instructions and example prompts to try.
 
+### Running the tests
+
+`pytest` is installed by `backend/requirements.txt`:
+
+```bash
+cd backend
+python -m pytest tests -q     # 114 hermetic cases; the 8 grant tests skip
+
+# to run the grant integration tests too, against a throwaway database:
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/scratch \
+  python -m pytest tests -q
+```
+
 ## Environment Variables
 
 **Backend** (`backend/.env`, see `backend/.env.example`):
@@ -287,16 +302,15 @@ Frontend → Vercel, backend → Render, app database → Neon. Config files (`f
 - **Typed end-to-end**: Pydantic schemas on the backend, TypeScript interfaces on the frontend mirroring them.
 - **Every failure mode has a home**: invalid SQL, empty results, bad credentials, AI timeouts, and an offline database each produce a specific, human-readable message instead of a generic error.
 - **The AI step is measured, not assumed**: a 40-case execution-match eval harness with a tested grader, two models benchmarked side by side, and honestly stated blind spots — see [Evaluation](#evaluation).
-- **The security-critical modules are unit-tested**: 90 hermetic pytest cases over `sql_validator` (stacked statements, data-modifying CTEs, keyword-in-literal false positives, the outer-vs-subquery row cap) and the scoped-access helpers — plus tests that pin each module's *documented* limitations, so a future change can't widen them silently. Four further integration tests assert what Postgres itself does about grants, and skip unless `TEST_DATABASE_URL` points at a throwaway database (`backend/tests/`).
+- **The security-critical modules are unit-tested**: 114 hermetic pytest cases — no database, no network — over `sql_validator` (stacked statements, data-modifying CTEs, keyword-in-literal false positives, the outer-vs-subquery row cap) and the scoped-access helpers (`access_script`, the foreign-key pruning in `schema_introspector`, the `42501` translation in `sql_executor`) — plus tests that pin each module's *documented* limitations, so a future change can't widen them silently. Eight further integration tests assert what Postgres itself does about grants, and skip unless `TEST_DATABASE_URL` points at a throwaway database (`backend/tests/`).
 
 ## Future Improvements
 
 - Refresh tokens / server-side session invalidation (current auth is stateless JWT — simple, but "logout" only clears the client-side token)
 - Streaming AI responses instead of a single request/response round trip
 - Multi-database "join across connections" queries
-- A guided flow for creating a restricted role (generate the `CREATE ROLE`/`GRANT` script from a table picker) — the enforcement already works today, but the role has to be created by hand
-- Extend the test suite beyond `sql_validator` (76 pytest cases today) to the other services, plus Vitest/RTL for frontend components
-- Harden the baseline: repeat runs for variance (currently n=1, one model), order-aware grading for top-N questions, and more cases per tag
+- Extend the test suite to the remaining services (AI, export, schema discovery) — `sql_validator` and the scoped-access helpers are covered today — plus Vitest/RTL for frontend components
+- Harden the baseline: repeat runs for variance (currently n=1 per model), order-aware grading for top-N questions, and more cases per tag
 
 ## Interview Talking Points
 
