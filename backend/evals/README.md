@@ -195,6 +195,14 @@ change what is being measured, and would contaminate this baseline.
 Every gold query was verified against the live demo database to run without error
 and return a non-empty result under 500 rows (the pipeline's auto-`LIMIT`).
 
+That check is necessary but not sufficient: it validates gold against *Postgres*,
+not against the *system prompt*. `hard-01` and `hard-02` passed it while ending in
+a `LIMIT 10` the prompt explicitly forbids the model from inventing, so the
+harness scored the obedient model as wrong for two whole runs — see
+[The gold-query correction](BASELINE.md#the-gold-query-correction). A gold query
+must satisfy both: it has to run, *and* it has to be something the prompt permits
+the model to produce.
+
 The `hard_ambiguous` cases are the point of the tag, not a bug: "who are our best
 customers?" has no single right answer, and `hard-05` ("profit margin by
 category") needs the model to know `products.cost` is wholesale cost — which is

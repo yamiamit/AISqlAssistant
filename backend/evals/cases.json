@@ -217,13 +217,13 @@
   {
     "id": "hard-01",
     "question": "Who are our best customers?",
-    "gold_sql": "SELECT c.customer_id, ROUND(SUM(pay.amount), 2) AS revenue FROM customers c JOIN orders o ON o.customer_id = c.customer_id JOIN payments pay ON pay.order_id = o.order_id WHERE pay.status = 'completed' GROUP BY c.customer_id ORDER BY revenue DESC LIMIT 10",
+    "gold_sql": "SELECT c.customer_id, ROUND(SUM(pay.amount), 2) AS revenue FROM customers c JOIN orders o ON o.customer_id = c.customer_id JOIN payments pay ON pay.order_id = o.order_id WHERE pay.status = 'completed' GROUP BY c.customer_id ORDER BY revenue DESC",
     "tags": ["hard_ambiguous"]
   },
   {
     "id": "hard-02",
     "question": "Which products are underperforming?",
-    "gold_sql": "SELECT p.product_name, SUM(oi.quantity) AS units_sold FROM order_items oi JOIN products p ON p.product_id = oi.product_id GROUP BY p.product_name ORDER BY units_sold ASC LIMIT 10",
+    "gold_sql": "SELECT p.product_name, SUM(oi.quantity) AS units_sold FROM order_items oi JOIN products p ON p.product_id = oi.product_id GROUP BY p.product_name ORDER BY units_sold ASC",
     "tags": ["hard_ambiguous"]
   },
   {

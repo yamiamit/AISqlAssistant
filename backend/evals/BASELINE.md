@@ -3,9 +3,16 @@
 First valid baseline for the natural-language → SQL pipeline, graded by
 **execution match** against the demo database.
 
+> **Re-graded after a gold-query fix.** `hard-01` and `hard-02` had gold queries
+> ending in `LIMIT 10` while the system prompt forbids inventing a top-N cutoff,
+> so the harness scored the model that obeyed as wrong. Both runs below were
+> re-graded from their stored `generated_sql` at zero AI calls. Strict match is
+> unchanged (11/40, 16/40); answer-correct moved **Gemini 77.5% → 75.0%** and
+> **Groq 77.5% → 82.5%**. See [The gold-query correction](#the-gold-query-correction).
+
 | | |
 |---|---|
-| **Run** | `evals/results/20260825T222915.json` |
+| **Run** | `evals/results/20260826T192000.json` |
 | **Date** | 2026-08-25 |
 | **Model** | `gemini-3.5-flash-lite` (temperature 0.1, JSON mode) |
 | **Cases** | 40, across 6 tags |
@@ -17,11 +24,11 @@ First valid baseline for the natural-language → SQL pipeline, graded by
 
 ```
 exact execution match (runner PASS)    11 / 40    27.5%
-right rows, extra columns              20 / 40    50.0%
-genuinely wrong answer                  9 / 40    22.5%
+right rows, extra columns              19 / 40    47.5%
+genuinely wrong answer                 10 / 40    25.0%
 never produced runnable SQL             0 / 40     0.0%
 ---------------------------------------------------------
-ANSWER-CORRECT (exact + over-selected) 31 / 40    77.5%
+ANSWER-CORRECT (exact + over-selected) 30 / 40    75.0%
 ```
 
 Two numbers, because they measure different things and only quoting one of them
@@ -29,7 +36,7 @@ is misleading:
 
 - **27.5% strict execution match** is what `runner.py` prints. A case passes only
   if the result set matches gold exactly — column *count* included.
-- **77.5% answer-correct** additionally counts cases where the model returned
+- **75.0% answer-correct** additionally counts cases where the model returned
   **exactly the right rows** but selected extra columns. Reproduce with
   `python evals/analyze_failures.py evals/results/<run>.json` (zero AI calls).
 
@@ -40,7 +47,7 @@ right; the projection is wider. 20 of the 29 failures are exactly this.
 
 Both numbers are honest. Which to quote depends on the question being asked:
 *"does the generated query match a reference query?"* → 27.5%.
-*"did the user get the right data back?"* → 77.5%.
+*"did the user get the right data back?"* → 75.0%.
 
 ## Second model: `openai/gpt-oss-120b` (Groq), 2026-08-28
 
@@ -49,54 +56,54 @@ Run `evals/results/20260828T194837.json` — 40 cases, 0 provider failures, ~6 m
 
 ```
 exact execution match (runner PASS)    16 / 40    40.0%
-right rows, extra columns              15 / 40    37.5%
-genuinely wrong answer                  9 / 40    22.5%
+right rows, extra columns              17 / 40    42.5%
+genuinely wrong answer                  7 / 40    17.5%
 never produced runnable SQL             0 / 40     0.0%
 ---------------------------------------------------------
-ANSWER-CORRECT (exact + over-selected) 31 / 40    77.5%
+ANSWER-CORRECT (exact + over-selected) 33 / 40    82.5%
 ```
 
-**Both models land on exactly 77.5% answer-correct, and on exactly 9 genuinely
-wrong — via completely different cases.**
+**Groq leads by 7.5 points on answer-correct (82.5% vs 75.0%) and by 12.5 on
+strict match.**
 
 | Tag | Gemini 3.5-flash-lite | Groq gpt-oss-120b |
 |---|---|---|
 | `aggregation` | 75% | **100%** |
 | `date_reasoning` | 80% | **100%** |
 | `two_table_join` | 100% | 100% |
-| `multi_table_join` | 50% | **67%** |
+| `multi_table_join` | 67% | 67% |
 | `single_table_filter` | 88% | 75% |
-| `hard_ambiguous` | 60% | **0%** |
-| **overall answer-correct** | **77.5%** | **77.5%** |
+| `hard_ambiguous` | 20% | **40%** |
+| **overall answer-correct** | **75.0%** | **82.5%** |
 
 What the comparison settles:
 
-- **The weak spot was partly capability.** `multi_table_join` improved 50% → 67%
-  and `aggregation`/`date_reasoning` went to 100% on the larger model. Join depth
-  does track difficulty, as suspected.
-- **But the ceiling is not capability.** A substantially larger model moved cases
-  around without moving the total at all. What it gained on aggregation and joins
-  it gave back on `hard_ambiguous` (3/5 → 0/5) and `single_table_filter`.
-- **`hard_ambiguous` is doing its job.** gpt-oss-120b answers those questions far
-  more expansively — 190 rows where gold returns 10, 189 where gold returns 59.
-  Neither reading is wrong; the questions have no single right answer, which is
-  the entire point of the tag.
+- **Capability moves the total.** `aggregation`, `date_reasoning` and
+  `two_table_join` all reach 100% on the larger model, and it leads answer-correct
+  by 7.5 points. Join depth does track difficulty, as suspected.
+- **`multi_table_join` is the shared ceiling.** Both models sit at 67% — the only
+  tag the larger model does not improve.
+- **`hard_ambiguous` is still doing its job.** Even with gold corrected, both
+  models trail badly there (20% / 40%). `hard-03`, `hard-04` and `hard-05` have no
+  single right answer, which is the entire point of the tag.
 - **Strict match is the more model-sensitive metric** (27.5% → 40.0%) because it
   partly measures projection style, which differs sharply between models.
 
-Caveat: n=1 per model, and the Gemini pair alone varies ±2.5% run to run (see
-below). Treat 77.5% ≈ 77.5% as "indistinguishable", not "identical".
+Caveat: n=1 per model, the Gemini pair alone varies ±2.5% run to run (see below),
+and tie-broken top-N cases like `join3-03` add roughly ±1 case. The 7.5-point gap
+is wider than that noise, but it rests on one run per model — a direction, not a
+measurement.
 
 ## Per-tag breakdown
 
 | Tag | exact | +cols | wrong | total | answer-correct |
 |---|---|---|---|---|---|
-| `two_table_join` | 2 | 6 | 0 | 8 | **100%** |
+| `two_table_join` | 3 | 5 | 0 | 8 | **100%** |
 | `single_table_filter` | 0 | 7 | 1 | 8 | **88%** |
 | `date_reasoning` | 2 | 2 | 1 | 5 | **80%** |
 | `aggregation` | 5 | 1 | 2 | 8 | **75%** |
-| `hard_ambiguous` | 0 | 3 | 2 | 5 | **60%** |
-| `multi_table_join` | 2 | 1 | 3 | 6 | **50%** |
+| `multi_table_join` | 1 | 3 | 2 | 6 | **67%** |
+| `hard_ambiguous` | 0 | 1 | 4 | 5 | **20%** |
 
 `single_table_filter` scores **0% strict / 88% answer-correct** — the single
 clearest illustration of why the strict number alone misleads. Every one of those
@@ -108,9 +115,11 @@ a gold query that made one specific choice.
 not the projection. Difficulty tracks join depth, which is the expected shape.
 
 `hard_ambiguous` scoring 0% strict is **an expected result, not a regression** —
-the tag exists to mark the ceiling. See the note in `README.md`.
+the tag exists to mark the ceiling. Its answer-correct number fell from 60% to 20%
+when the invented `LIMIT 10` was removed from gold; see
+[The gold-query correction](#the-gold-query-correction).
 
-## The 9 genuinely wrong cases
+## The 10 genuinely wrong cases (Gemini)
 
 Worth reading individually, because they are not all the same kind of error:
 
@@ -120,7 +129,8 @@ Worth reading individually, because they are not all the same kind of error:
 | `agg-04` | Added an unasked `WHERE status = 'completed'` to payments — defensible reading, different answer. |
 | `agg-06` | Grouped by `category_name` (joining `categories`) instead of `category_id`. Arguably the *better* answer; still not gold's. |
 | `date-01` | Read "order revenue" off `payments.amount` rather than `orders.total_amount`. |
-| `join3-02`, `join3-03`, `join3-05` | Correct shape, differ at the `LIMIT` boundary / tie-breaking on a top-N. |
+| `join3-02`, `join3-05` | Correct shape, differ at the `LIMIT` boundary / tie-breaking on a top-N. (`join3-03` is the same shape but grades either way between executions — it is the ±1 of run-to-run noise.) |
+| `hard-01`, `hard-02` | Answered the *un*cut question ("best customers", "underperforming products") with 10 rows where corrected gold returns all of them — Gemini invented the top-N cutoff the prompt forbids. |
 | `hard-03`, `hard-04` | `hard_ambiguous` by design — "month-over-month growth", "customers at risk of churning" have no single right answer. |
 
 Only `filter-03` is unambiguously a model mistake. The rest are interpretation
@@ -128,6 +138,43 @@ differences on underspecified questions — which is itself the finding: at this
 model size the failure mode is *reading the question differently*, not producing
 broken SQL. **Zero cases produced invalid SQL, zero were rejected by the
 validator, and zero hallucinated a table or column.**
+
+## The gold-query correction
+
+Found while investigating why `hard_ambiguous` collapsed to 0% on Groq.
+
+`hard-01` ("Who are our best customers?") and `hard-02` ("Which products are
+underperforming?") name no cutoff, and the system prompt is explicit:
+
+> Do NOT invent a top-N cutoff. Only add `LIMIT n` / `ORDER BY ... LIMIT n` for
+> ranking when the question actually asks for one ("top 10", "best 5").
+
+Both gold queries nevertheless ended in `LIMIT 10`. **Gold contradicted the rule
+the model was graded against.** The effect was asymmetric, which is why it went
+unnoticed for a whole model comparison:
+
+| | hard-01 | hard-02 | Effect |
+|---|---|---|---|
+| Groq (obeyed the rule) | returned all 190 | returned all 80 | marked **wrong** |
+| Gemini (invented a cutoff) | returned 10 | returned 50 | marked **right** |
+
+The harness was rewarding the model that ignored its instructions and penalising
+the one that followed them — and that, not model quality, produced the striking
+"both models score exactly 77.5%" result in the first version of this document.
+
+The fix removes the two invented `LIMIT`s from `cases.json`. Both runs were then
+re-graded from their stored `generated_sql`, so the corrected numbers cost **zero
+AI calls**:
+
+| | strict (before → after) | answer-correct (before → after) |
+|---|---|---|
+| Gemini | 11/40 → **11/40** | 31/40 → **30/40** (77.5% → 75.0%) |
+| Groq | 16/40 → **16/40** | 31/40 → **33/40** (77.5% → 82.5%) |
+
+Strict match is unchanged for both, because neither case was ever an exact match.
+That the re-grade reproduces both recorded strict counts exactly is the check that
+makes the new answer-correct numbers quotable — a re-grade that could not
+reproduce them would be measuring its own bugs.
 
 ## Harness integrity
 
@@ -222,7 +269,10 @@ Stated so the numbers are not over-read:
   estimates, not means. n=1.
 - **40 cases on one schema.** Enough to rank tags, not enough for tight
   confidence intervals on any single tag (5–8 cases each).
-- **One model.** No cross-model comparison; the 27.5/77.5 pair characterizes
-  `gemini-3.5-flash-lite`, not the pipeline's ceiling.
+- **Two models, one run each.** The 27.5/75.0 pair characterizes
+  `gemini-3.5-flash-lite` and 40.0/82.5 characterizes `gpt-oss-120b` — neither is
+  the pipeline's ceiling, and neither has a variance estimate.
+- **Tie-broken top-N cases grade either way.** `join3-03` flips between
+  executions; budget ±1 case on any answer-correct total.
 - **Execution match's own blind spots** — order-insensitivity, coincidental
   agreement — are documented in `README.md` and apply here unchanged.

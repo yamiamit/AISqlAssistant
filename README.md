@@ -102,9 +102,9 @@ detail in [`BASELINE.md`](backend/evals/BASELINE.md):
 | Metric | Gemini 3.5-flash-lite | Groq `gpt-oss-120b` | What it answers |
 |---|---|---|---|
 | Strict execution match | 27.5% (11/40) | **40.0%** (16/40) | Does the result set match the reference query *exactly*, column count included? |
-| Right rows, extra columns | 50.0% (20/40) | 37.5% (15/40) | Correct answer, wider `SELECT`. |
-| **Answer-correct** | **77.5%** (31/40) | **77.5%** (31/40) | **Did the user get the right rows back?** |
-| Genuinely wrong answer | 22.5% (9/40) | 22.5% (9/40) | Wrong data, not just a wider `SELECT`. |
+| Right rows, extra columns | 47.5% (19/40) | 42.5% (17/40) | Correct answer, wider `SELECT`. |
+| **Answer-correct** | **75.0%** (30/40) | **82.5%** (33/40) | **Did the user get the right rows back?** |
+| Genuinely wrong answer | 25.0% (10/40) | 17.5% (7/40) | Wrong data, not just a wider `SELECT`. |
 | Invalid / rejected / hallucinated SQL | **0%** (0/40) | **0%** (0/40) | Every case produced valid SQL the validator accepted and Postgres ran. |
 
 Per tag, by answer-correct:
@@ -115,11 +115,9 @@ Per tag, by answer-correct:
 | `aggregation` | 8 | 75% | **100%** | `GROUP BY`, `COUNT`/`SUM`/`AVG` |
 | `date_reasoning` | 5 | 80% | **100%** | Year/quarter/month bucketing |
 | `single_table_filter` | 8 | 88% | 75% | One table, a `WHERE` clause |
-| `multi_table_join` | 6 | 50% | **67%** | Three or more tables |
-| `hard_ambiguous` | 5 | 60% | 0% † | Deliberately underspecified — *expected to fail* |
-| **Overall** | **40** | **77.5%** | **77.5%** | |
-
-† 2 of these 5 are a harness defect, not a model failure — see the caveats below.
+| `multi_table_join` | 6 | 67% | 67% | Three or more tables |
+| `hard_ambiguous` | 5 | 20% | **40%** | Deliberately underspecified — *expected to fail* |
+| **Overall** | **40** | **75.0%** | **82.5%** | |
 
 Beyond accuracy, the two providers differ in ways that decide which is actually
 usable:
@@ -132,41 +130,63 @@ usable:
 
 ### What the comparison shows
 
-**Both models land on exactly 77.5% answer-correct, and on exactly 9 genuinely
-wrong — from completely different cases.** That coincidence is the most useful
-result in the table:
+**Groq answers 82.5% of questions correctly to Gemini's 75.0%.** The first version
+of this baseline scored *both* models at exactly 77.5% and built its conclusions on
+that coincidence. The coincidence was mostly a scoring bug — see
+[The gold-query correction](#the-gold-query-correction) below — and fixing it
+inverted the original conclusion, which was that capability had not moved the
+headline number at all:
 
-- **The headline number is not where the improvement is.** Answer-correct did not
-  move at all. The +12.5 points of strict match are largely Groq picking narrower
-  projections that happened to match gold more often — style, not skill.
+- **Capability does move the total.** The larger model leads on answer-correct by
+  7.5 points, not just on strict match, and it clears three tags outright:
+  `aggregation`, `date_reasoning`, and `two_table_join` all at 100%.
+- **Strict match still partly measures style.** The strict-match gap (12.5 points)
+  is wider than the answer-correct gap (7.5), because strict match additionally
+  rewards Groq for picking narrower projections that happen to match gold.
 - **The real quality win is one case the score barely registers.** `filter-03`,
   *"which products cost more than 100 dollars?"*, is the only genuinely dangerous
   answer either model produced: Gemini filtered wholesale `cost` instead of retail
   `price` and returned **2 products instead of 7** — a user would believe that was
   the whole list. Groq gets it right. One case in a 40-case benchmark, worth more
   than the twelve points.
-- **Capability matters, up to a point.** The larger model fixed the known weak
-  spot — `multi_table_join` 50% → 67% — and took `aggregation` and
-  `date_reasoning` to 100%. Difficulty does track join depth.
-- **But capability is not the ceiling.** A substantially larger model moved cases
-  around without moving the total at all: what it gained on joins and aggregation
-  it gave back on `single_table_filter` and `hard_ambiguous`.
+- **`multi_table_join` is the shared ceiling.** Both models sit at 67% — the one
+  tag the larger model does not improve. Difficulty tracks join depth, and three
+  or more tables is where both still break.
 - **Zero invalid SQL on either model.** No syntax errors, no hallucinated tables
   or columns, nothing caught by the validator, across 80 generations. The failure
   mode at both model sizes is *reading the question differently*, not writing
   broken SQL.
 
-Two caveats on the numbers above, both found while investigating them:
+### The gold-query correction
 
-- **`hard_ambiguous` 0% overstates the drop.** 2 of those 5 (`hard-01`, `hard-02`)
-  are a harness defect, not a model failure: the prompt rule says *"do NOT invent a
-  top-N cutoff"*, the questions ("who are our best customers?") name no number, and
-  the gold queries end in `LIMIT 10` anyway. The model is marked wrong for obeying
-  its instructions.
+The numbers above are a **re-grade**, not the originally published run. Two
+`hard_ambiguous` gold queries — `hard-01` *"who are our best customers?"* and
+`hard-02` *"which products are underperforming?"* — ended in `LIMIT 10`, while the
+system prompt explicitly instructs the model *"do NOT invent a top-N cutoff"* and
+neither question names a number. Gold contradicted the contract the model was held
+to.
+
+The bug was not neutral. Groq obeyed the rule, returned all 190 ranked customers,
+and was marked wrong; Gemini invented the cutoff, returned 10, and was marked
+right. **The harness was rewarding the model that ignored its instructions.**
+Removing the two invented `LIMIT`s moved Groq **+5.0** points and Gemini **−2.5** —
+which is what erased the 77.5% tie.
+
+Both runs were re-graded from their stored `generated_sql` at **zero AI calls**.
+Strict match is unchanged for both models (11/40 and 16/40), because neither case
+was ever an exact match; the re-grade reproducing those two counts exactly is what
+makes the corrected answer-correct numbers trustworthy. One unrelated wobble
+remains: `join3-03` is one of the tie-broken top-N cases and grades either way
+between executions, so the Gemini column carries about ±1 case of variance
+independent of this fix.
+
+One caveat still stands:
+
 - **The over-selection gap is not fixable in the prompt.** Tested directly: adding
   an explicit "select the minimum columns" rule *and* narrowing the few-shot
   example left strict match at exactly 16/40, but dropped answer-correct from
-  **77.5% → 45.0%** — the model began under-selecting, and a missing column is
+  **77.5% → 45.0%** (measured before the gold correction above) — the model began
+  under-selecting, and a missing column is
   unrecoverable where an extra one is not. Gold itself is inconsistent (it wants
   `product_name` for products, all five name/contact fields for customers, and no
   name at all for top-10-customers), so there is no rule that satisfies all three.
@@ -185,8 +205,10 @@ afterwards without spending an AI call. Note that strict match is also the far
 more model-sensitive number (27.5% → 40.0% between models, versus no change in
 answer-correct), because it partly measures projection *style*.
 
-⚠️ **n=1 per model.** Temperature is 0.1, not 0, and repeat Gemini runs vary by
-about ±2.5%. Treat 77.5% ≈ 77.5% as *indistinguishable*, not identical.
+⚠️ **n=1 per model.** Temperature is 0.1, not 0, repeat Gemini runs vary by about
+±2.5%, and tie-broken top-N cases add roughly ±1 case. The 7.5-point answer-correct
+gap is wider than that noise, but it rests on one run per model — treat it as a
+direction, not a measurement.
 
 ### Reproducing
 
@@ -322,5 +344,5 @@ This project is designed so each of these is a two-minute answer, not a slide:
 - **Prompt engineering** — how the schema gets serialized into the AI prompt, why JSON-mode + a few-shot example keeps output parseable (`utils/prompt_templates.py`)
 - **SQL validation** — the layered defense between "AI-generated text" and "SQL that actually runs", and why the app layer can only ever police the *shape* of a query while table-level access has to come from Postgres grants (`services/sql_validator.py`, `services/sql_executor.py`)
 - **Chart selection** — a small rule-based heuristic instead of another AI call (`utils/chart_suggester.py`) — a deliberate simplicity trade-off
-- **Evaluating the AI** — why execution match beats string comparison, why the benchmark reports strict *and* answer-correct rather than one number, and what it means that two very different models both land on 77.5% answer-correct from different cases (`backend/evals/`)
+- **Evaluating the AI** — why execution match beats string comparison, why the benchmark reports strict *and* answer-correct rather than one number, and how a gold query that contradicted the system prompt was quietly scoring the obedient model as wrong (`backend/evals/`)
 - **Reading a benchmark honestly** — why a run can be *void* rather than bad (the `NOT A VALID BASELINE` guard), why a rate limit mislabelled as a timeout sent hours of debugging at the wrong fix, and why the harness paces itself against a tokens-per-minute cap
